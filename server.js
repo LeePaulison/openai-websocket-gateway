@@ -1,29 +1,46 @@
+import express from "express";
 import http from "http";
+import cors from "cors";
+
 import "dotenv/config";
 
+import { toNodeHandler } from "better-auth/node";
+
+import { auth } from "./auth/auth.js";
 import { websocketServer } from "./websocket.js";
+import { yoga } from "./graphql.js";
 
-const hostname = "localhost";
-const port = 8080;
+import userRouter from "./routes/user.js";
 
-const httpServer = http.createServer((request, response) => {
-  if (request.url === "/health") {
-    response.writeHead(200, {
-      "Content-Type": "application/json",
-    });
+const hostname = process.env.HOSTNAME || "localhost";
+const port = Number(process.env.PORT) || 3000;
 
-    response.end(
-      JSON.stringify({
-        status: "ok",
-      }),
-    );
+const app = express();
 
-    return;
-  }
+console.log("Mounting auth routes");
 
-  response.writeHead(404);
-  response.end();
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "http://localhost:3001",
+    credentials: true,
+  }),
+);
+
+app.use("/api/graphql", yoga);
+
+app.use("/api/users", userRouter);
+
+app.all("/api/auth/*", toNodeHandler(auth));
+
+console.log("Auth routes mounted");
+
+app.get("/health", (request, response) => {
+  response.json({
+    status: "ok",
+  });
 });
+
+const httpServer = http.createServer(app);
 
 httpServer.on("upgrade", async (request, socket, head) => {
   if (request.url !== "/ws") {
@@ -45,5 +62,5 @@ httpServer.on("upgrade", async (request, socket, head) => {
 });
 
 httpServer.listen(port, () => {
-  console.log(`> WS Server ready on http://${hostname}:${port}`);
+  console.log(`> Server ready on http://${hostname}:${port}`);
 });

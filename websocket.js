@@ -1,15 +1,21 @@
 import { WebSocketServer } from "ws";
 import { createChatStream } from "./lib/openai/chat.js";
 import { saveConversationTurn } from "./services/conversationService.js";
+import { createContext } from "./graphql/context.js";
 
 export const websocketServer = new WebSocketServer({
   noServer: true,
 });
 
-websocketServer.on("connection", (socket, request) => {
-  console.log("WebSocket connected");
+websocketServer.on("connection", async (socket, request) => {
+  const { authenticated, user } = await createContext({ request });
 
-  const userId = "dev-user";
+  if (!authenticated || !user) {
+    socket.close();
+    return;
+  }
+
+  const userId = user.id;
 
   console.log("WebSocket connected:", userId);
 

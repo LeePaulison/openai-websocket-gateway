@@ -3,6 +3,11 @@ import { ObjectId } from "mongodb";
 import { getMongoDatabase } from "../lib/db/mongo.js";
 
 export async function createConversation({ userId, messages }) {
+  console.log("createConversation called", {
+    userId,
+    messageCount: messages.length,
+  });
+
   const database = await getMongoDatabase();
 
   const conversationsCollection = database.collection("conversations");
@@ -18,6 +23,11 @@ export async function createConversation({ userId, messages }) {
     messages,
   });
 
+  console.log("Conversation created", {
+    conversationId: result.insertedId.toString(),
+    messageCount: messages.length,
+  });
+
   return {
     conversationId: result.insertedId.toString(),
   };
@@ -29,6 +39,11 @@ export async function appendMessages({ conversationId, messages }) {
   const conversationsCollection = database.collection("conversations");
 
   const now = new Date();
+
+  console.log("appendMessages called", {
+    conversationId,
+    messageCount: messages.length,
+  });
 
   await conversationsCollection.updateOne(
     {
@@ -69,16 +84,13 @@ export async function getUserConversations(userId) {
 
   return conversationsCollection
     .find(
-      {
-        userId,
-      },
+      { userId },
       {
         projection: {
+          updatedAt: 1,
           messages: {
             $slice: -1,
           },
-
-          updatedAt: 1,
         },
       },
     )
