@@ -6,14 +6,31 @@ import "dotenv/config";
 
 import { toNodeHandler } from "better-auth/node";
 
+import { db } from "./lib/db/sqlite.js";
 import { auth } from "./auth/auth.js";
 import { websocketServer } from "./websocket.js";
 import { yoga } from "./graphql.js";
 
 import userRouter from "./routes/user.js";
 
+import { testPreferencesRepository } from "./testing/repositoryTesting.js";
+
 const hostname = process.env.HOSTNAME || "localhost";
 const port = Number(process.env.PORT) || 3000;
+
+console.log("Initializing database");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS preferences (
+    user_id TEXT PRIMARY KEY,
+    model TEXT NOT NULL DEFAULT 'gpt-4.1-mini',
+    temperature REAL NOT NULL DEFAULT 0.7,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+console.log("Database initialized");
 
 const app = express();
 

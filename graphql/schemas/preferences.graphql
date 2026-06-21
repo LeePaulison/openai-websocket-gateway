@@ -1,0 +1,18 @@
+type Preferences {
+  userId: String!
+  model: String!
+  temperature: Float!
+}
+
+extend type Query {
+  preferences: Preferences
+}
+
+input UpdatePreferencesInput {
+  model: String!
+  temperature: Float!
+}
+
+type Mutation {
+  updatePreferences(input: UpdatePreferencesInput!): Preferences!
+}
