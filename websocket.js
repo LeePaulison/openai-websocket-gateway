@@ -3,12 +3,18 @@ import { createChatStream } from "./lib/openai/chat.js";
 import { saveConversationTurn } from "./services/conversationService.js";
 import { createContext } from "./graphql/context.js";
 
+import {
+  register,
+  getPreferences,
+  remove,
+} from "./lib/session/sessionManager.js";
+
 export const websocketServer = new WebSocketServer({
   noServer: true,
 });
 
 websocketServer.on("connection", async (socket, request) => {
-  const { authenticated, user } = await createContext({ request });
+  const { authenticated, user, preferences } = await createContext({ request });
 
   if (!authenticated || !user) {
     socket.close();
@@ -18,6 +24,8 @@ websocketServer.on("connection", async (socket, request) => {
   const userId = user.id;
 
   console.log("WebSocket connected:", userId);
+
+  register(userId, preferences);
 
   socket.send(
     JSON.stringify({
@@ -31,12 +39,16 @@ websocketServer.on("connection", async (socket, request) => {
 
       const conversationId = parsedMessage.payload.conversationId;
       const userMessage = parsedMessage.payload.content;
+      const conversationPreferences = getPreferences(userId);
 
       console.log("Received:", parsedMessage);
 
       if (parsedMessage.type === "chat_message") {
         let fullAssistantResponse = "";
-        const stream = await createChatStream(parsedMessage.payload.content);
+        const stream = await createChatStream({
+          message: userMessage,
+          preferences: conversationPreferences,
+        });
 
         for await (const chunk of stream) {
           const content = chunk.choices?.[0]?.delta?.content;
@@ -90,6 +102,8 @@ websocketServer.on("connection", async (socket, request) => {
   });
 
   socket.on("close", () => {
+    remove(userId);
+
     console.log("WebSocket disconnected");
   });
 });
