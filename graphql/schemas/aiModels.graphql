@@ -1,0 +1,10 @@
+type AiModel {
+  modelId: String!
+  name: String!
+  provider: String!
+  description: String!
+}
+
+extend type Query {
+  aiModels: [AiModel!]!
+}

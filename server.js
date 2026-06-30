@@ -12,6 +12,8 @@ import { websocketServer } from "./websocket.js";
 import { yoga } from "./graphql.js";
 
 import userRouter from "./routes/user.js";
+import { createDefaultAiAgents } from "./repositories/aiAgentsRepository.js";
+import { createDefaultAiModels } from "./repositories/aiModelsRepository.js";
 
 import { testPreferencesRepository } from "./testing/repositoryTesting.js";
 
@@ -23,14 +25,45 @@ console.log("Initializing database");
 db.exec(`
   CREATE TABLE IF NOT EXISTS preferences (
     user_id TEXT PRIMARY KEY,
-    model TEXT NOT NULL DEFAULT 'gpt-4.1-mini',
+    theme TEXT NOT NULL DEFAULT 'dark',
+    default_model_id TEXT NOT NULL DEFAULT 'gpt-4.1-mini',
     temperature REAL NOT NULL DEFAULT 0.7,
+    default_agent_id TEXT NOT NULL DEFAULT 'assistant',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_models (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      description TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_agents (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    system_prompt TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 console.log("Database initialized");
+createDefaultAiAgents();
+console.log("Seeding default agents");
+createDefaultAiModels();
+console.log("Seeding default models");
 
 const app = express();
 

@@ -1,7 +1,9 @@
 type Preferences {
   userId: String!
-  model: String!
+  theme: String!
+  defaultModelId: String!
   temperature: Float!
+  defaultAgentId: String!
 }
 
 extend type Query {
@@ -9,8 +11,10 @@ extend type Query {
 }
 
 input UpdatePreferencesInput {
-  model: String!
+  theme: String!
+  defaultModelId: String!
   temperature: Float!
+  defaultAgentId: String!
 }
 
 type Mutation {

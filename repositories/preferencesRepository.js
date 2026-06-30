@@ -6,8 +6,10 @@ export function getPreferencesByUserId(userId) {
       `
       SELECT
         user_id AS userId,
-        model,
+        theme,
+        default_model_id AS defaultModelId,
         temperature,
+        default_agent_id AS defaultAgentId,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM preferences
@@ -19,47 +21,42 @@ export function getPreferencesByUserId(userId) {
 export function createPreferences(userId) {
   db.prepare(
     `
-    INSERT INTO preferences (
-      user_id,
-      model,
-      temperature
-    )
-    VALUES (?, ?, ?)
+    INSERT INTO preferences (user_id)
+    VALUES (?)
     ON CONFLICT(user_id)
     DO NOTHING
   `,
-  ).run(userId, "gpt-4.1-mini", 0.7);
+  ).run(userId);
 
   return getPreferencesByUserId(userId);
 }
 
-export function updatePreferences({ userId, model, temperature }) {
+export function updatePreferences({
+  userId,
+  theme,
+  model,
+  temperature,
+  defaultAgentId,
+}) {
   db.prepare(
     `
     INSERT INTO preferences (
       user_id,
-      model,
-      temperature
+      theme,
+      default_model_id,
+      temperature,
+      default_agent_id
     )
-    VALUES (?, ?, ?)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(user_id)
     DO UPDATE SET
-      model = excluded.model,
+      theme = excluded.theme,
+      default_model_id = excluded.default_model_id,
       temperature = excluded.temperature,
+      default_agent_id = excluded.default_agent_id,
       updated_at = CURRENT_TIMESTAMP
   `,
-  ).run(userId, model, temperature);
+  ).run(userId, theme, defaultModelId, temperature, defaultAgentId);
 
-  return db
-    .prepare(
-      `
-    SELECT
-      user_id AS userId,
-      model,
-      temperature
-    FROM preferences
-    WHERE user_id = ?
-  `,
-    )
-    .get(userId);
+  return getPreferencesByUserId(userId);
 }

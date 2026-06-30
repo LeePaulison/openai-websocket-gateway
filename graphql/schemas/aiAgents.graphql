@@ -1,0 +1,10 @@
+type AiAgent {
+  agentId: String!
+  category: String!
+  name: String!
+  description: String!
+}
+
+extend type Query {
+  aiAgents: [AiAgent!]!
+}
