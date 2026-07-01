@@ -149,6 +149,25 @@ export const defaultAgents = [
   },
 ];
 
+export function getAiAgents() {
+  return db
+    .prepare(
+      `
+      SELECT
+        id AS agentId,
+        category,
+        name,
+        description,
+        system_prompt AS systemPrompt,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM ai_agents
+      ORDER BY category, name
+    `,
+    )
+    .all();
+}
+
 export function getAiAgentById(agentId) {
   return db
     .prepare(
@@ -159,7 +178,7 @@ export function getAiAgentById(agentId) {
       name,
       description,
       system_prompt AS systemPrompt,
-      create_at AS createdAt,
+      created_at AS createdAt,
       updated_at AS updatedAt
     FROM ai_agents
     WHERE id = ?

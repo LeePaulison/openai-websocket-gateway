@@ -27,8 +27,10 @@ export const preferencesResolvers = {
 
       const preferences = updatePreferencesRepository({
         userId,
-        model: input.model,
+        theme: input.theme,
+        defaultModelId: input.defaultModelId,
         temperature: input.temperature,
+        defaultAgentId: input.defaultAgentId,
       });
 
       update(userId, preferences);

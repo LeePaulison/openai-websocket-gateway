@@ -30,6 +30,23 @@ export const defaultAiModels = [
   },
 ];
 
+export function getAiModels() {
+  return db
+    .prepare(
+      `
+      SELECT
+        id AS modelId,
+        provider,
+        name,
+        description
+      FROM ai_models
+      WHERE enabled = 1
+      ORDER BY provider, name
+    `,
+    )
+    .all();
+}
+
 export function getAiModelById(modelId) {
   return db
     .prepare(
