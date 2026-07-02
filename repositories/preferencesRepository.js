@@ -34,7 +34,7 @@ export function createPreferences(userId) {
 export function updatePreferences({
   userId,
   theme,
-  model,
+  defaultModelId,
   temperature,
   defaultAgentId,
 }) {
@@ -58,5 +58,9 @@ export function updatePreferences({
   `,
   ).run(userId, theme, defaultModelId, temperature, defaultAgentId);
 
-  return getPreferencesByUserId(userId);
+  const updatedPreferences = getPreferencesByUserId(userId);
+
+  console.log(updatedPreferences);
+
+  return updatedPreferences;
 }

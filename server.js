@@ -15,8 +15,6 @@ import userRouter from "./routes/user.js";
 import { createDefaultAiAgents } from "./repositories/aiAgentsRepository.js";
 import { createDefaultAiModels } from "./repositories/aiModelsRepository.js";
 
-import { testPreferencesRepository } from "./testing/repositoryTesting.js";
-
 const hostname = process.env.HOSTNAME || "localhost";
 const port = Number(process.env.PORT) || 3000;
 

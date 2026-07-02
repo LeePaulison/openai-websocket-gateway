@@ -2,12 +2,13 @@ import { WebSocketServer } from "ws";
 import { createChatStream } from "./lib/openai/chat.js";
 import { saveConversationTurn } from "./services/conversationService.js";
 import { createContext } from "./graphql/context.js";
-
 import {
   register,
   getPreferences,
   remove,
 } from "./lib/session/sessionManager.js";
+import { getAiAgentById } from "./repositories/aiAgentsRepository.js";
+import { getAiModelById } from "./repositories/aiModelsRepository.js";
 
 export const websocketServer = new WebSocketServer({
   noServer: true,
@@ -41,13 +42,22 @@ websocketServer.on("connection", async (socket, request) => {
       const userMessage = parsedMessage.payload.content;
       const conversationPreferences = getPreferences(userId);
 
+      let aiAgent = null;
+      let aiModel = null;
+      if (conversationPreferences) {
+        aiAgent = await getAiAgentById(conversationPreferences.defaultAgentId);
+        aiModel = await getAiModelById(conversationPreferences.defaultModelId);
+      }
+
       console.log("Received:", parsedMessage);
 
       if (parsedMessage.type === "chat_message") {
         let fullAssistantResponse = "";
         const stream = await createChatStream({
           message: userMessage,
-          preferences: conversationPreferences,
+          model: aiModel?.modelId,
+          temperature: conversationPreferences?.temperature,
+          systemPrompt: aiAgent?.systemPrompt,
         });
 
         for await (const chunk of stream) {
