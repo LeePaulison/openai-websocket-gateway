@@ -3,6 +3,9 @@ type AiModel {
   name: String!
   provider: String!
   description: String!
+  supportsTemperature: Boolean!
+  supportsReasoning: Boolean!
+  supportsVerbosity: Boolean!
 }
 
 extend type Query {

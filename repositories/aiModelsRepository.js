@@ -54,7 +54,7 @@ const MODEL_CAPABILITIES = `
 `;
 
 export function getAiModels() {
-  return db
+  const models = db
     .prepare(
       `
       SELECT
@@ -63,16 +63,24 @@ export function getAiModels() {
         name,
         description,
         ${MODEL_CAPABILITIES}
-        FROM ai_models
+      FROM ai_models
       WHERE enabled = 1
       ORDER BY provider, name
-    `,
+      `,
     )
     .all();
+
+  return models.map((model) => ({
+    ...model,
+    supportsTemperature: Boolean(model.supportsTemperature),
+    supportsReasoning: Boolean(model.supportsReasoning),
+    supportsVerbosity: Boolean(model.supportsVerbosity),
+    supportsStreaming: Boolean(model.supportsStreaming),
+  }));
 }
 
 export function getAiModelById(modelId) {
-  return db
+  const model = db
     .prepare(
       `
       SELECT
@@ -88,6 +96,18 @@ export function getAiModelById(modelId) {
       `,
     )
     .get(modelId);
+
+  if (!model) {
+    return null;
+  }
+
+  return {
+    ...model,
+    supportsTemperature: Boolean(model.supportsTemperature),
+    supportsReasoning: Boolean(model.supportsReasoning),
+    supportsVerbosity: Boolean(model.supportsVerbosity),
+    supportsStreaming: Boolean(model.supportsStreaming),
+  };
 }
 
 export function upsertAiModel({
