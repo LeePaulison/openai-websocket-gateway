@@ -3,6 +3,8 @@ type Preferences {
   theme: String!
   defaultModelId: String!
   temperature: Float!
+  defaultReasoningId: String!
+  defaultVerbosityId: String!
   defaultAgentId: String!
 }
 
@@ -14,6 +16,8 @@ input UpdatePreferencesInput {
   theme: String!
   defaultModelId: String!
   temperature: Float!
+  defaultReasoningId: String!
+  defaultVerbosityId: String!
   defaultAgentId: String!
 }
 

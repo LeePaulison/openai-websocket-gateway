@@ -26,6 +26,8 @@ db.exec(`
     theme TEXT NOT NULL DEFAULT 'dark',
     default_model_id TEXT NOT NULL DEFAULT 'gpt-4.1-mini',
     temperature REAL NOT NULL DEFAULT 0.7,
+    default_reasoning_id TEXT NOT NULL DEFAULT 'medium',
+    default_verbosity_id TEXT NOT NULL DEFAULT 'medium',
     default_agent_id TEXT NOT NULL DEFAULT 'assistant',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

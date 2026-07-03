@@ -9,11 +9,14 @@ export function getPreferencesByUserId(userId) {
         theme,
         default_model_id AS defaultModelId,
         temperature,
+        default_reasoning_id AS defaultReasoningId,
+        default_verbosity_id AS defaultVerbosityId,
         default_agent_id AS defaultAgentId,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM preferences
-      WHERE user_id = ?    `,
+      WHERE user_id = ?
+      `,
     )
     .get(userId);
 }
@@ -35,6 +38,8 @@ export function updatePreferences({
   userId,
   theme,
   defaultModelId,
+  defaultReasoningId,
+  defaultVerbosityId,
   temperature,
   defaultAgentId,
 }) {
@@ -45,18 +50,30 @@ export function updatePreferences({
       theme,
       default_model_id,
       temperature,
+      default_reasoning_id,
+      default_verbosity_id,
       default_agent_id
     )
-    VALUES (?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id)
     DO UPDATE SET
       theme = excluded.theme,
       default_model_id = excluded.default_model_id,
       temperature = excluded.temperature,
+      default_reasoning_id = excluded.default_reasoning_id,
+      default_verbosity_id = excluded.default_verbosity_id,
       default_agent_id = excluded.default_agent_id,
       updated_at = CURRENT_TIMESTAMP
   `,
-  ).run(userId, theme, defaultModelId, temperature, defaultAgentId);
+  ).run(
+    userId,
+    theme,
+    defaultModelId,
+    temperature,
+    defaultReasoningId,
+    defaultVerbosityId,
+    defaultAgentId,
+  );
 
   const updatedPreferences = getPreferencesByUserId(userId);
 

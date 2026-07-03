@@ -9,6 +9,8 @@ import {
 } from "./lib/session/sessionManager.js";
 import { getAiAgentById } from "./repositories/aiAgentsRepository.js";
 import { getAiModelById } from "./repositories/aiModelsRepository.js";
+import { getReasoningLevelById } from "./repositories/reasoningLevelsRepository.js";
+import { getVerbosityLevelById } from "./repositories/verbosityLevelsRepository.js";
 
 export const websocketServer = new WebSocketServer({
   noServer: true,
@@ -96,9 +98,17 @@ websocketServer.on("connection", async (socket, request) => {
 
       let aiAgent = null;
       let aiModel = null;
+      let reasoningLevel = null;
+      let verbosityLevel = null;
       if (conversationPreferences) {
-        aiAgent = await getAiAgentById(conversationPreferences.defaultAgentId);
-        aiModel = await getAiModelById(conversationPreferences.defaultModelId);
+        aiAgent = getAiAgentById(conversationPreferences.defaultAgentId);
+        aiModel = getAiModelById(conversationPreferences.defaultModelId);
+        reasoningLevel = getReasoningLevelById(
+          conversationPreferences.defaultReasoningId,
+        );
+        verbosityLevel = getVerbosityLevelById(
+          conversationPreferences.defaultVerbosityId,
+        );
       }
 
       if (parsedMessage.type === "chat_message") {
@@ -106,6 +116,8 @@ websocketServer.on("connection", async (socket, request) => {
         const stream = await createChatStream({
           message: userMessage,
           model: aiModel,
+          reasoningLevel,
+          verbosityLevel,
           temperature: conversationPreferences?.temperature,
           systemPrompt: aiAgent?.systemPrompt,
         });
