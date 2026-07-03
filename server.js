@@ -14,11 +14,11 @@ import { yoga } from "./graphql.js";
 import userRouter from "./routes/user.js";
 import { createDefaultAiAgents } from "./repositories/aiAgentsRepository.js";
 import { createDefaultAiModels } from "./repositories/aiModelsRepository.js";
+import { createDefaultVerbosityLevels } from "./repositories/verbosityLevelsRepository.js";
+import { createDefaultReasoningLevels } from "./repositories/reasoningLevelsRepository.js";
 
 const hostname = process.env.HOSTNAME || "localhost";
 const port = Number(process.env.PORT) || 3000;
-
-console.log("Initializing database");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS preferences (
@@ -40,8 +40,37 @@ db.exec(`
       description TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
 
+      supports_temperature INTEGER NOT NULL DEFAULT 0,
+      supports_reasoning INTEGER NOT NULL DEFAULT 0,
+      supports_verbosity INTEGER NOT NULL DEFAULT 0,
+      supports_streaming INTEGER NOT NULL DEFAULT 0,
+
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS reasoning_levels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS verbosity_levels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `);
 
@@ -57,15 +86,12 @@ db.exec(`
   );
 `);
 
-console.log("Database initialized");
-createDefaultAiAgents();
-console.log("Seeding default agents");
 createDefaultAiModels();
-console.log("Seeding default models");
+createDefaultReasoningLevels();
+createDefaultVerbosityLevels();
+createDefaultAiAgents();
 
 const app = express();
-
-console.log("Mounting auth routes");
 
 app.use(
   cors({

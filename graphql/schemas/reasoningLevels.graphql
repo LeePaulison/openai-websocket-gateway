@@ -1,0 +1,9 @@
+type ReasoningLevel {
+  levelId: String!
+  name: String!
+  description: String!
+}
+
+extend type Query {
+  reasoningLevels: [ReasoningLevel!]!
+}

@@ -1,0 +1,9 @@
+type VerbosityLevel {
+  levelId: String!
+  name: String!
+  description: String!
+}
+
+extend type Query {
+  verbosityLevels: [VerbosityLevel!]!
+}

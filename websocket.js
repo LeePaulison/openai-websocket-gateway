@@ -24,8 +24,6 @@ websocketServer.on("connection", async (socket, request) => {
 
   const userId = user.id;
 
-  console.log("WebSocket connected:", userId);
-
   register(userId, preferences);
 
   socket.send(
@@ -38,6 +36,60 @@ websocketServer.on("connection", async (socket, request) => {
     try {
       const parsedMessage = JSON.parse(rawMessage.toString());
 
+      console.log("WS - parsedMessage: ", parsedMessage);
+
+      if (
+        parsedMessage === null ||
+        typeof parsedMessage !== "object" ||
+        Array.isArray(parsedMessage)
+      ) {
+        socket.send(
+          JSON.stringify({ type: "error", message: "Invalid message format" }),
+        );
+        return;
+      }
+
+      if (
+        typeof parsedMessage.type !== "string" ||
+        typeof parsedMessage.payload !== "object" ||
+        parsedMessage.payload === null
+      ) {
+        socket.send(
+          JSON.stringify({ type: "error", message: "Invalid message format" }),
+        );
+        return;
+      }
+
+      if (parsedMessage.type == "chat_message") {
+        if (
+          typeof parsedMessage.payload.content !== "string" ||
+          parsedMessage.payload.content.trim().length === 0
+        ) {
+          socket.send(
+            JSON.stringify({
+              type: "error",
+              message: "Invalid message content",
+            }),
+          );
+          return;
+        }
+
+        if (
+          typeof parsedMessage.payload.conversationId !== "string" ||
+          parsedMessage.payload.conversationId.trim().length === 0
+        ) {
+          socket.send(
+            JSON.stringify({
+              type: "error",
+              message: "Invalid conversation ID",
+            }),
+          );
+          return;
+        }
+      }
+
+      console.log("Received:", parsedMessage);
+
       const conversationId = parsedMessage.payload.conversationId;
       const userMessage = parsedMessage.payload.content;
       const conversationPreferences = getPreferences(userId);
@@ -49,13 +101,11 @@ websocketServer.on("connection", async (socket, request) => {
         aiModel = await getAiModelById(conversationPreferences.defaultModelId);
       }
 
-      console.log("Received:", parsedMessage);
-
       if (parsedMessage.type === "chat_message") {
         let fullAssistantResponse = "";
         const stream = await createChatStream({
           message: userMessage,
-          model: aiModel?.modelId,
+          model: aiModel,
           temperature: conversationPreferences?.temperature,
           systemPrompt: aiAgent?.systemPrompt,
         });
