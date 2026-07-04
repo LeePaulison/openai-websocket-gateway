@@ -17,126 +17,152 @@ import { createDefaultAiModels } from "./repositories/aiModelsRepository.js";
 import { createDefaultVerbosityLevels } from "./repositories/verbosityLevelsRepository.js";
 import { createDefaultReasoningLevels } from "./repositories/reasoningLevelsRepository.js";
 
+import { logger } from "./lib/logger.js";
+
 const hostname = process.env.HOSTNAME || "localhost";
 const port = Number(process.env.PORT) || 3000;
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS preferences (
-    user_id TEXT PRIMARY KEY,
-    theme TEXT NOT NULL DEFAULT 'dark',
-    default_model_id TEXT NOT NULL DEFAULT 'gpt-4.1-mini',
-    temperature REAL NOT NULL DEFAULT 0.7,
-    default_reasoning_id TEXT NOT NULL DEFAULT 'medium',
-    default_verbosity_id TEXT NOT NULL DEFAULT 'medium',
-    default_agent_id TEXT NOT NULL DEFAULT 'assistant',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+const app = express();
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS ai_models (
+logger.info("Server starting...");
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS preferences (
+      user_id TEXT PRIMARY KEY,
+      theme TEXT NOT NULL DEFAULT 'dark',
+      default_model_id TEXT NOT NULL DEFAULT 'gpt-4.1-mini',
+      temperature REAL NOT NULL DEFAULT 0.7,
+      default_reasoning_id TEXT NOT NULL DEFAULT 'medium',
+      default_verbosity_id TEXT NOT NULL DEFAULT 'medium',
+      default_agent_id TEXT NOT NULL DEFAULT 'assistant',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_models (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        description TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+
+        supports_temperature INTEGER NOT NULL DEFAULT 0,
+        supports_reasoning INTEGER NOT NULL DEFAULT 0,
+        supports_verbosity INTEGER NOT NULL DEFAULT 0,
+        supports_streaming INTEGER NOT NULL DEFAULT 0,
+
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reasoning_levels (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      provider TEXT NOT NULL,
       description TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
 
-      supports_temperature INTEGER NOT NULL DEFAULT 0,
-      supports_reasoning INTEGER NOT NULL DEFAULT 0,
-      supports_verbosity INTEGER NOT NULL DEFAULT 0,
-      supports_streaming INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS verbosity_levels (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
 
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_agents (
+      id TEXT PRIMARY KEY,
+      category TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      system_prompt TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  logger.info("Database schema initialized");
+
+  createDefaultAiModels();
+  createDefaultReasoningLevels();
+  createDefaultVerbosityLevels();
+  createDefaultAiAgents();
+
+  logger.info("Default data initialized");
+
+  app.use(
+    cors({
+      origin: process.env.CORS_ORIGIN || "http://localhost:3001",
+      credentials: true,
+    }),
   );
-`);
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS reasoning_levels (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
+  app.use("/api/graphql", yoga);
 
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-`);
+  app.use("/api/users", userRouter);
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS verbosity_levels (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
+  app.all("/api/auth/*", toNodeHandler(auth));
 
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-`);
+  logger.info("Auth routes mounted");
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS ai_agents (
-    id TEXT PRIMARY KEY,
-    category TEXT NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL,
-    system_prompt TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
-createDefaultAiModels();
-createDefaultReasoningLevels();
-createDefaultVerbosityLevels();
-createDefaultAiAgents();
-
-const app = express();
-
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3001",
-    credentials: true,
-  }),
-);
-
-app.use("/api/graphql", yoga);
-
-app.use("/api/users", userRouter);
-
-app.all("/api/auth/*", toNodeHandler(auth));
-
-console.log("Auth routes mounted");
-
-app.get("/health", (request, response) => {
-  response.json({
-    status: "ok",
-  });
-});
-
-const httpServer = http.createServer(app);
-
-httpServer.on("upgrade", async (request, socket, head) => {
-  if (request.url !== "/ws") {
-    socket.destroy();
-    return;
-  }
-
-  try {
-    websocketServer.handleUpgrade(request, socket, head, (websocket) => {
-      websocketServer.emit("connection", websocket, request);
+  app.get("/health", (request, response) => {
+    response.json({
+      status: "ok",
     });
-  } catch (error) {
-    console.error("WebSocket upgrade failed:", error);
+  });
 
-    socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
+  const httpServer = http.createServer(app);
 
-    socket.destroy();
-  }
-});
+  httpServer.on("upgrade", (request, socket, head) => {
+    if (request.url !== "/ws") {
+      socket.destroy();
 
-httpServer.listen(port, () => {
-  console.log(`> Server ready on http://${hostname}:${port}`);
-});
+      logger.warn("WebSocket upgrade failed: invalid URL", {
+        url: request.url,
+      });
+
+      return;
+    }
+
+    try {
+      websocketServer.handleUpgrade(request, socket, head, (websocket) => {
+        websocketServer.emit("connection", websocket, request);
+      });
+    } catch (error) {
+      logger.error("WebSocket upgrade failed", error);
+
+      socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
+
+      socket.destroy();
+    }
+  });
+
+  httpServer.on("error", (error) => {
+    logger.error("HTTP server failed", error);
+    process.exit(1);
+  });
+
+  httpServer.listen(port, () => {
+    logger.info("Server ready", {
+      host: hostname,
+      port,
+    });
+  });
+} catch (error) {
+  logger.error("Server startup failed", error);
+  process.exit(1);
+}

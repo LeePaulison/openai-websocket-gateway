@@ -1,6 +1,8 @@
 import express from "express";
 import { auth } from "../auth/auth.js";
 
+import { logger } from "../lib/logger.js";
+
 const router = express.Router();
 
 router.get("/me", async (request, response) => {
@@ -26,7 +28,7 @@ router.get("/me", async (request, response) => {
       },
     });
   } catch (error) {
-    console.error("Failed to resolve session:", error);
+    logger.error("Failed to resolve session:", error);
 
     return response.status(500).json({
       authenticated: false,

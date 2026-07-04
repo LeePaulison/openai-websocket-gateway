@@ -12,6 +12,8 @@ import { getAiModelById } from "./repositories/aiModelsRepository.js";
 import { getReasoningLevelById } from "./repositories/reasoningLevelsRepository.js";
 import { getVerbosityLevelById } from "./repositories/verbosityLevelsRepository.js";
 
+import { logger } from "./lib/logger.js";
+
 export const websocketServer = new WebSocketServer({
   noServer: true,
 });
@@ -20,6 +22,9 @@ websocketServer.on("connection", async (socket, request) => {
   const { authenticated, user, preferences } = await createContext({ request });
 
   if (!authenticated || !user) {
+    logger.warn("Unauthorized WebSocket connection attempt", {
+      ip: request.socket.remoteAddress,
+    });
     socket.close();
     return;
   }
@@ -28,6 +33,7 @@ websocketServer.on("connection", async (socket, request) => {
 
   register(userId, preferences);
 
+  logger.info("WebSocket connected", { userId });
   socket.send(
     JSON.stringify({
       type: "connected",
@@ -35,16 +41,16 @@ websocketServer.on("connection", async (socket, request) => {
   );
 
   socket.on("message", async (rawMessage) => {
+    let parsedMessage;
     try {
-      const parsedMessage = JSON.parse(rawMessage.toString());
-
-      console.log("WS - parsedMessage: ", parsedMessage);
+      parsedMessage = JSON.parse(rawMessage.toString());
 
       if (
         parsedMessage === null ||
         typeof parsedMessage !== "object" ||
         Array.isArray(parsedMessage)
       ) {
+        logger.warn("Invalid message format", { userId, parsedMessage });
         socket.send(
           JSON.stringify({ type: "error", message: "Invalid message format" }),
         );
@@ -56,8 +62,15 @@ websocketServer.on("connection", async (socket, request) => {
         typeof parsedMessage.payload !== "object" ||
         parsedMessage.payload === null
       ) {
+        logger.warn("Invalid message format", {
+          userId,
+          raw: rawMessage.toString(),
+        });
         socket.send(
-          JSON.stringify({ type: "error", message: "Invalid message format" }),
+          JSON.stringify({
+            type: "error",
+            message: "Invalid message payload format",
+          }),
         );
         return;
       }
@@ -67,6 +80,7 @@ websocketServer.on("connection", async (socket, request) => {
           typeof parsedMessage.payload.content !== "string" ||
           parsedMessage.payload.content.trim().length === 0
         ) {
+          logger.warn("Invalid message content", { userId, parsedMessage });
           socket.send(
             JSON.stringify({
               type: "error",
@@ -80,6 +94,10 @@ websocketServer.on("connection", async (socket, request) => {
           typeof parsedMessage.payload.conversationId !== "string" ||
           parsedMessage.payload.conversationId.trim().length === 0
         ) {
+          logger.warn("Invalid conversation ID", {
+            userId,
+            conversationId: parsedMessage.payload.conversationId,
+          });
           socket.send(
             JSON.stringify({
               type: "error",
@@ -89,8 +107,6 @@ websocketServer.on("connection", async (socket, request) => {
           return;
         }
       }
-
-      console.log("Received:", parsedMessage);
 
       const conversationId = parsedMessage.payload.conversationId;
       const userMessage = parsedMessage.payload.content;
@@ -159,7 +175,10 @@ websocketServer.on("connection", async (socket, request) => {
         );
       }
     } catch (error) {
-      console.error("WebSocket error:", error);
+      logger.error("WebSocket request failed.", error, {
+        userId,
+        messageType: parsedMessage?.type,
+      });
 
       socket.send(
         JSON.stringify({
@@ -176,6 +195,6 @@ websocketServer.on("connection", async (socket, request) => {
   socket.on("close", () => {
     remove(userId);
 
-    console.log("WebSocket disconnected");
+    logger.info("WebSocket disconnected", { userId });
   });
 });

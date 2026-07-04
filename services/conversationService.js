@@ -5,6 +5,8 @@ import {
   getUserConversations,
 } from "../repositories/conversationRepository.js";
 
+import { logger } from "../lib/logger.js";
+
 export async function saveConversationTurn({
   conversationId,
   userId,
@@ -25,21 +27,11 @@ export async function saveConversationTurn({
   ];
 
   if (!conversationId) {
-    console.log("Creating conversation", {
-      userId,
-      messageCount: messages.length,
-    });
-
     return createConversation({
       userId,
       messages,
     });
   }
-
-  console.log("Appending messages", {
-    conversationId,
-    messageCount: messages.length,
-  });
 
   return appendMessages({
     conversationId,
