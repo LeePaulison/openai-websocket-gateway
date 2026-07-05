@@ -99,10 +99,12 @@ websocketServer.on("connection", async (socket, request) => {
         return;
       }
 
-      if (
-        typeof conversationId !== "string" ||
-        conversationId.trim().length === 0
-      ) {
+      const hasValidConversationId =
+        conversationId === null ||
+        (typeof conversationId === "string" &&
+          conversationId.trim().length > 0);
+
+      if (!hasValidConversationId) {
         logger.warn("Invalid conversation ID", {
           userId,
           conversationId,
@@ -189,9 +191,7 @@ websocketServer.on("connection", async (socket, request) => {
 
       sendJson(socket, {
         type: "chat_complete",
-        payload: {
-          conversationId: savedConversation.conversationId,
-        },
+        payload: savedConversation,
       });
     } catch (error) {
       logger.error("WebSocket request failed.", {

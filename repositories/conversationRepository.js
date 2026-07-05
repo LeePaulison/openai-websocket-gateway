@@ -20,6 +20,8 @@ export async function createConversation({ userId, messages }) {
 
   return {
     conversationId: result.insertedId.toString(),
+    preview: messages[0].content,
+    updatedAt: now.toISOString(),
   };
 }
 
@@ -49,6 +51,8 @@ export async function appendMessages({ conversationId, messages }) {
 
   return {
     conversationId,
+    preview: messages[0].content,
+    updatedAt: now.toISOString(),
   };
 }
 
