@@ -147,7 +147,7 @@ websocketServer.on("connection", async (socket, request) => {
         reasoningLevel,
         verbosityLevel,
         temperature: conversationPreferences.temperature,
-        systemPrompt: aiAgent?.systemPrompt,
+        agentSystemPrompt: aiAgent.systemPrompt,
       });
 
       for await (const event of stream) {
