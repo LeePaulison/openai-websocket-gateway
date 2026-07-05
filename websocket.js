@@ -11,12 +11,23 @@ import { getAiAgentById } from "./repositories/aiAgentsRepository.js";
 import { getAiModelById } from "./repositories/aiModelsRepository.js";
 import { getReasoningLevelById } from "./repositories/reasoningLevelsRepository.js";
 import { getVerbosityLevelById } from "./repositories/verbosityLevelsRepository.js";
-
 import { logger } from "./lib/logger.js";
 
 export const websocketServer = new WebSocketServer({
   noServer: true,
 });
+
+function sendJson(socket, message) {
+  if (socket.readyState !== socket.OPEN) return;
+  socket.send(JSON.stringify(message));
+}
+
+function sendError(socket, message) {
+  sendJson(socket, {
+    type: "error",
+    payload: { message },
+  });
+}
 
 websocketServer.on("connection", async (socket, request) => {
   const { authenticated, user, preferences } = await createContext({ request });
@@ -34,14 +45,14 @@ websocketServer.on("connection", async (socket, request) => {
   register(userId, preferences);
 
   logger.info("WebSocket connected", { userId });
-  socket.send(
-    JSON.stringify({
-      type: "connected",
-    }),
-  );
+
+  sendJson(socket, {
+    type: "connected",
+  });
 
   socket.on("message", async (rawMessage) => {
     let parsedMessage;
+
     try {
       parsedMessage = JSON.parse(rawMessage.toString());
 
@@ -50,151 +61,152 @@ websocketServer.on("connection", async (socket, request) => {
         typeof parsedMessage !== "object" ||
         Array.isArray(parsedMessage)
       ) {
-        logger.warn("Invalid message format", { userId, parsedMessage });
-        socket.send(
-          JSON.stringify({ type: "error", message: "Invalid message format" }),
-        );
+        logger.warn("Invalid message format", { userId });
+        sendError(socket, "Invalid message format");
         return;
       }
 
       if (
         typeof parsedMessage.type !== "string" ||
+        parsedMessage.payload === null ||
         typeof parsedMessage.payload !== "object" ||
-        parsedMessage.payload === null
+        Array.isArray(parsedMessage.payload)
       ) {
-        logger.warn("Invalid message format", {
+        logger.warn("Invalid message payload format", {
           userId,
           raw: rawMessage.toString(),
         });
-        socket.send(
-          JSON.stringify({
-            type: "error",
-            message: "Invalid message payload format",
-          }),
-        );
+
+        sendError(socket, "Invalid message payload format");
         return;
       }
 
-      if (parsedMessage.type == "chat_message") {
-        if (
-          typeof parsedMessage.payload.content !== "string" ||
-          parsedMessage.payload.content.trim().length === 0
-        ) {
-          logger.warn("Invalid message content", { userId, parsedMessage });
-          socket.send(
-            JSON.stringify({
-              type: "error",
-              message: "Invalid message content",
-            }),
-          );
-          return;
-        }
-
-        if (
-          typeof parsedMessage.payload.conversationId !== "string" ||
-          parsedMessage.payload.conversationId.trim().length === 0
-        ) {
-          logger.warn("Invalid conversation ID", {
-            userId,
-            conversationId: parsedMessage.payload.conversationId,
-          });
-          socket.send(
-            JSON.stringify({
-              type: "error",
-              message: "Invalid conversation ID",
-            }),
-          );
-          return;
-        }
-      }
-
-      const conversationId = parsedMessage.payload.conversationId;
-      const userMessage = parsedMessage.payload.content;
-      const conversationPreferences = getPreferences(userId);
-
-      let aiAgent = null;
-      let aiModel = null;
-      let reasoningLevel = null;
-      let verbosityLevel = null;
-      if (conversationPreferences) {
-        aiAgent = getAiAgentById(conversationPreferences.defaultAgentId);
-        aiModel = getAiModelById(conversationPreferences.defaultModelId);
-        reasoningLevel = getReasoningLevelById(
-          conversationPreferences.defaultReasoningId,
-        );
-        verbosityLevel = getVerbosityLevelById(
-          conversationPreferences.defaultVerbosityId,
-        );
-      }
-
-      if (parsedMessage.type === "chat_message") {
-        let fullAssistantResponse = "";
-        const stream = await createChatStream({
-          message: userMessage,
-          model: aiModel,
-          reasoningLevel,
-          verbosityLevel,
-          temperature: conversationPreferences?.temperature,
-          systemPrompt: aiAgent?.systemPrompt,
+      if (parsedMessage.type !== "chat_message") {
+        logger.warn("Unsupported WebSocket message type", {
+          userId,
+          messageType: parsedMessage.type,
         });
 
-        for await (const chunk of stream) {
-          const content = chunk.choices?.[0]?.delta?.content;
+        sendError(socket, "Unsupported message type");
+        return;
+      }
 
-          if (!content) {
-            continue;
-          }
+      const { content, conversationId } = parsedMessage.payload;
 
-          fullAssistantResponse += content;
+      if (typeof content !== "string" || content.trim().length === 0) {
+        logger.warn("Invalid message content", { userId });
+        sendError(socket, "Invalid message content");
+        return;
+      }
 
-          socket.send(
-            JSON.stringify({
-              type: "chat_chunk",
-
-              payload: {
-                content,
-              },
-            }),
-          );
-        }
-
-        const savedConversation = await saveConversationTurn({
+      if (
+        typeof conversationId !== "string" ||
+        conversationId.trim().length === 0
+      ) {
+        logger.warn("Invalid conversation ID", {
           userId,
           conversationId,
-          userMessage,
-          assistantMessage: fullAssistantResponse,
         });
 
-        socket.send(
-          JSON.stringify({
-            type: "chat_complete",
-            payload: {
-              conversationId: savedConversation.conversationId,
-            },
-          }),
-        );
+        sendError(socket, "Invalid conversation ID");
+        return;
       }
-    } catch (error) {
-      logger.error("WebSocket request failed.", error, {
-        userId,
-        messageType: parsedMessage?.type,
+
+      const conversationPreferences = getPreferences(userId);
+
+      if (!conversationPreferences) {
+        logger.warn("Missing conversation preferences", { userId });
+        sendError(socket, "Missing conversation preferences");
+        return;
+      }
+
+      const aiAgent = getAiAgentById(conversationPreferences.defaultAgentId);
+      const aiModel = getAiModelById(conversationPreferences.defaultModelId);
+      const reasoningLevel = getReasoningLevelById(
+        conversationPreferences.defaultReasoningId,
+      );
+      const verbosityLevel = getVerbosityLevelById(
+        conversationPreferences.defaultVerbosityId,
+      );
+
+      if (!aiModel) {
+        logger.warn("Missing AI model", {
+          userId,
+          modelId: conversationPreferences.defaultModelId,
+        });
+
+        sendError(socket, "Selected AI model was not found");
+        return;
+      }
+
+      let fullAssistantResponse = "";
+
+      const stream = await createChatStream({
+        message: content.trim(),
+        model: aiModel,
+        reasoningLevel,
+        verbosityLevel,
+        temperature: conversationPreferences.temperature,
+        systemPrompt: aiAgent?.systemPrompt,
       });
 
-      socket.send(
-        JSON.stringify({
-          type: "error",
+      for await (const event of stream) {
+        if (event.type === "response.output_text.delta") {
+          const delta = event.delta;
 
-          payload: {
-            message: "Failed to process websocket request.",
-          },
-        }),
-      );
+          if (!delta) continue;
+
+          fullAssistantResponse += delta;
+
+          sendJson(socket, {
+            type: "chat_chunk",
+            payload: {
+              content: delta,
+            },
+          });
+
+          continue;
+        }
+
+        if (event.type === "response.failed") {
+          const message =
+            event.response?.error?.message || "OpenAI response failed";
+
+          throw new Error(message);
+        }
+
+        if (event.type === "error") {
+          throw new Error(event.message || "OpenAI stream failed");
+        }
+      }
+
+      const savedConversation = await saveConversationTurn({
+        userId,
+        conversationId,
+        userMessage: content.trim(),
+        assistantMessage: fullAssistantResponse,
+      });
+
+      sendJson(socket, {
+        type: "chat_complete",
+        payload: {
+          conversationId: savedConversation.conversationId,
+        },
+      });
+    } catch (error) {
+      logger.error("WebSocket request failed.", {
+        userId,
+        messageType: parsedMessage?.type,
+        error: error.message,
+        stack: error.stack,
+      });
+
+      sendError(socket, "Failed to process websocket request.");
     }
   });
 
   socket.on("close", () => {
     remove(userId);
-
     logger.info("WebSocket disconnected", { userId });
   });
 });

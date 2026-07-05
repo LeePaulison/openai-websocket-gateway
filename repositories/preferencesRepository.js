@@ -43,6 +43,8 @@ export function updatePreferences({
   temperature,
   defaultAgentId,
 }) {
+  console.log("upsertPreferences: ", defaultReasoningId, defaultVerbosityId);
+
   db.prepare(
     `
     INSERT INTO preferences (

@@ -29,6 +29,8 @@ export const preferencesResolvers = {
         userId,
         theme: input.theme,
         defaultModelId: input.defaultModelId,
+        defaultReasoningId: input.defaultReasoningId,
+        defaultVerbosityId: input.defaultVerbosityId,
         temperature: input.temperature,
         defaultAgentId: input.defaultAgentId,
       });
