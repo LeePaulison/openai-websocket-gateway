@@ -38,8 +38,6 @@ export function getReasoningLevels() {
     )
     .all();
 
-  console.log(levels);
-
   return levels;
 }
 
