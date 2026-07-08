@@ -118,8 +118,10 @@ try {
       logger.info("Request Cookie:", req.headers.cookie);
     }
 
-    logger.info("Set-Cookie", {
-      setCookie: res.getHeader("Set-Cookie"),
+    res.on("finish", () => {
+      logger.info("Set-Cookie", {
+        setCookie: res.getHeader("Set-Cookie"),
+      });
     });
 
     return toNodeHandler(auth)(req, res);
