@@ -115,8 +115,12 @@ try {
   // app.all("/api/auth/*", toNodeHandler(auth));
   app.all("/api/auth/*", (req, res) => {
     if (req.path.includes("/callback")) {
-      logger.info("Cookie:", req.headers.cookie);
+      logger.info("Request Cookie:", req.headers.cookie);
     }
+
+    logger.info("Set-Cookie", {
+      setCookie: res.getHeader("Set-Cookie"),
+    });
 
     return toNodeHandler(auth)(req, res);
   });
