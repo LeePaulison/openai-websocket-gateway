@@ -112,7 +112,14 @@ try {
 
   app.use("/api/users", userRouter);
 
-  app.all("/api/auth/*", toNodeHandler(auth));
+  // app.all("/api/auth/*", toNodeHandler(auth));
+  app.all("/api/auth/*", (req, res) => {
+    if (req.path.includes("/callback")) {
+      logger.info("Cookie:", req.headers.cookie);
+    }
+
+    return toNodeHandler(auth)(req, res);
+  });
 
   logger.info("Auth routes mounted");
 

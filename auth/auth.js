@@ -5,6 +5,7 @@ import { db } from "../lib/db/sqlite.js";
 
 export const auth = betterAuth({
   database: db,
+  baseURL: "https://saigely-server.fly.dev",
 
   trustedOrigins: [process.env.CORS_ORIGIN ?? "http://localhost:3001"],
 
