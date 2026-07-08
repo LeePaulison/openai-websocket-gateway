@@ -5,7 +5,7 @@ import { db } from "../lib/db/sqlite.js";
 export const auth = betterAuth({
   database: db,
 
-  trustedOrigins: ["http://localhost:3001"],
+  trustedOrigins: [process.env.CORS_ORIGIN ?? "http://localhost:3001"],
 
   emailAndPassword: {
     enabled: false,

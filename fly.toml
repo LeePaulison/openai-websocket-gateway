@@ -1,12 +1,25 @@
-# fly.toml app configuration file generated for saigely-server on 2026-05-14T22:43:16-04:00
+# fly.toml app configuration file generated for saigely-server on 2026-07-07T19:41:12-04:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
 app = 'saigely-server'
-primary_region = 'ord'
+primary_region = 'dfw'
 
 [build]
+
+[deploy]
+  release_command = "npm run auth:migrate"
+
+[processes]
+  app = 'npm start'
+
+[[mounts]]
+  source = 'data'
+  destination = '/data'
+  auto_extend_size_threshold = 80
+  auto_extend_size_increment = '1GB'
+  auto_extend_size_limit = '10GB'
 
 [http_service]
   internal_port = 8080
@@ -14,18 +27,7 @@ primary_region = 'ord'
   auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-
-  [http_service.concurrency]
-    type = 'connections'
-    hard_limit = 100
-    soft_limit = 80
-
-  [[http_service.checks]]
-    interval = '15s'
-    timeout = '2s'
-    grace_period = '5s'
-    method = 'GET'
-    path = '/health'
+  processes = ['app']
 
 [[vm]]
   memory = '1gb'

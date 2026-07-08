@@ -1,3 +1,9 @@
+/**
+ * This file exists solely for Better Auth CLI table generation.
+ * The application runtime uses auth.js.
+ * Keep the configuration in sync if authentication settings change.
+ */
+
 import { betterAuth } from "better-auth";
 
 import { db } from "../lib/db/sqlite.js";
@@ -5,7 +11,7 @@ import { db } from "../lib/db/sqlite.js";
 export const auth = betterAuth({
   database: db,
 
-  trustedOrigins: ["http://localhost:3001"],
+  trustedOrigins: [process.env.CORS_ORIGIN ?? "http://localhost:3001"],
 
   emailAndPassword: {
     enabled: false,

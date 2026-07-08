@@ -19,9 +19,6 @@ import { createDefaultReasoningLevels } from "./repositories/reasoningLevelsRepo
 
 import { logger } from "./lib/logger.js";
 
-const hostname = process.env.HOSTNAME || "localhost";
-const port = Number(process.env.PORT) || 3000;
-
 const app = express();
 
 logger.info("Server starting...");
@@ -156,9 +153,12 @@ try {
     process.exit(1);
   });
 
-  httpServer.listen(port, () => {
+  const host = process.env.HOST || "0.0.0.0";
+  const port = Number(process.env.PORT) || 8080;
+
+  httpServer.listen(port, host, () => {
     logger.info("Server ready", {
-      host: hostname,
+      host,
       port,
     });
   });
