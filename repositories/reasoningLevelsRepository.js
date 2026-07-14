@@ -1,4 +1,7 @@
-import { db } from "../lib/db/sqlite.js";
+import { asc, eq, sql } from "drizzle-orm";
+
+import { db } from "../lib/db/neon.js";
+import { reasoningLevels } from "../drizzle/reasoningLevels.js";
 
 export const defaultReasoningLevels = [
   {
@@ -23,63 +26,69 @@ export const defaultReasoningLevels = [
   },
 ];
 
-export function getReasoningLevels() {
-  const levels = db
-    .prepare(
-      `
-      SELECT
-        id AS levelId,
-        name,
-        description
-      FROM reasoning_levels
-      WHERE enabled = 1
-      ORDER BY name
-    `,
-    )
-    .all();
-
-  return levels;
+export async function getReasoningLevels() {
+  return db
+    .select({
+      levelId: reasoningLevels.levelId,
+      name: reasoningLevels.name,
+      description: reasoningLevels.description,
+    })
+    .from(reasoningLevels)
+    .where(eq(reasoningLevels.enabled, true))
+    .orderBy(asc(reasoningLevels.name));
 }
 
-export function getReasoningLevelById(levelId) {
-  return db
-    .prepare(
-      `
-      SELECT
-        id AS levelId,
+export async function getReasoningLevelById(levelId) {
+  const [level] = await db
+    .select({
+      levelId: reasoningLevels.levelId,
+      name: reasoningLevels.name,
+      description: reasoningLevels.description,
+      createdAt: reasoningLevels.createdAt,
+      updatedAt: reasoningLevels.updatedAt,
+    })
+    .from(reasoningLevels)
+    .where(eq(reasoningLevels.levelId, levelId))
+    .limit(1);
+
+  return level;
+}
+
+export async function upsertReasoningLevel({
+  levelId,
+  name,
+  description,
+}) {
+  const [level] = await db
+    .insert(reasoningLevels)
+    .values({
+      levelId,
+      name,
+      description,
+    })
+    .onConflictDoUpdate({
+      target: reasoningLevels.levelId,
+      set: {
         name,
         description,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM reasoning_levels
-      WHERE id = ?
-      `,
-    )
-    .get(levelId);
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+
+  return level;
 }
 
-export function upsertReasoningLevel({ levelId, name, description }) {
-  db.prepare(
-    `
-    INSERT INTO reasoning_levels (
-      id,
-      name,
-      description
-    )
-    VALUES (?, ?, ?)
-    ON CONFLICT(id)
-    DO UPDATE SET
-      name = excluded.name,
-      description = excluded.description,
-      updated_at = CURRENT_TIMESTAMP
-    `,
-  ).run(levelId, name, description);
-
-  return getReasoningLevelById(levelId);
-}
-
-export function createDefaultReasoningLevels() {
-  defaultReasoningLevels.forEach((level) => {
-    upsertReasoningLevel(level);
-  });
+export async function createDefaultReasoningLevels() {
+  await db
+    .insert(reasoningLevels)
+    .values(defaultReasoningLevels)
+    .onConflictDoUpdate({
+      target: reasoningLevels.levelId,
+      set: {
+        name: sql.raw("excluded.name"),
+        description: sql.raw("excluded.description"),
+        updatedAt: new Date(),
+      },
+    });
 }

@@ -1,4 +1,7 @@
-import { db } from "../lib/db/sqlite.js";
+import { asc, eq, sql } from "drizzle-orm";
+
+import { db } from "../lib/db/neon.js";
+import { aiAgents } from "../drizzle/aiAgents.js";
 
 export const defaultAgents = [
   {
@@ -149,76 +152,66 @@ export const defaultAgents = [
   },
 ];
 
-export function getAiAgents() {
+export async function getAiAgents() {
   return db
-    .prepare(
-      `
-      SELECT
-        id AS agentId,
-        category,
-        name,
-        description,
-        system_prompt AS systemPrompt,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM ai_agents
-      ORDER BY category, name
-    `,
-    )
-    .all();
+    .select()
+    .from(aiAgents)
+    .orderBy(asc(aiAgents.category), asc(aiAgents.name));
 }
 
-export function getAiAgentById(agentId) {
-  return db
-    .prepare(
-      `
-    SELECT
-      id as agentId,
-      category,
-      name,
-      description,
-      system_prompt AS systemPrompt,
-      created_at AS createdAt,
-      updated_at AS updatedAt
-    FROM ai_agents
-    WHERE id = ?
-    `,
-    )
-    .get(agentId);
+export async function getAiAgentById(agentId) {
+  const [agent] = await db
+    .select()
+    .from(aiAgents)
+    .where(eq(aiAgents.agentId, agentId))
+    .limit(1);
+
+  return agent;
 }
 
-export function upsertAiAgent({
+export async function upsertAiAgent({
   agentId,
   category,
   name,
   description,
   systemPrompt,
 }) {
-  db.prepare(
-    `
-    INSERT INTO ai_agents (
-      id,
+  const [agent] = await db
+    .insert(aiAgents)
+    .values({
+      agentId,
       category,
       name,
       description,
-      system_prompt
-    )
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(id)
-    DO UPDATE SET
-      category = excluded.category,
-      name = excluded.name,
-      description = excluded.description,
-      system_prompt = excluded.system_prompt,
-      updated_at = CURRENT_TIMESTAMP
-    `,
-  ).run(agentId, category, name, description, systemPrompt);
+      systemPrompt,
+    })
+    .onConflictDoUpdate({
+      target: aiAgents.agentId,
+      set: {
+        category,
+        name,
+        description,
+        systemPrompt,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
 
-  return db.prepare(`SELECT * FROM ai_agents WHERE id = ?`).get(agentId);
+  return agent;
 }
 
-export function createDefaultAiAgents() {
-  defaultAgents.forEach((agent) => {
-    upsertAiAgent(agent);
-  });
+export async function createDefaultAiAgents() {
+  await db
+    .insert(aiAgents)
+    .values(defaultAgents)
+    .onConflictDoUpdate({
+      target: aiAgents.agentId,
+      set: {
+        category: sql.raw(`excluded.category`),
+        name: sql.raw(`excluded.name`),
+        description: sql.raw(`excluded.description`),
+        systemPrompt: sql.raw(`excluded.system_prompt`),
+        updatedAt: new Date(),
+      },
+    });
 }

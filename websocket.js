@@ -1,21 +1,50 @@
 import { WebSocketServer } from "ws";
+import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import { createChatStream } from "./lib/openai/chat.js";
 import { saveConversationTurn } from "./services/conversationService.js";
-import { createContext } from "./graphql/context.js";
+import { getPreferencesByUserId } from "./repositories/preferencesRepository.js";
 import {
-  register,
-  getPreferences,
   remove,
 } from "./lib/session/sessionManager.js";
-import { getAiAgentById } from "./repositories/aiAgentsRepository.js";
-import { getAiModelById } from "./repositories/aiModelsRepository.js";
-import { getReasoningLevelById } from "./repositories/reasoningLevelsRepository.js";
-import { getVerbosityLevelById } from "./repositories/verbosityLevelsRepository.js";
 import { logger } from "./lib/logger.js";
 
 export const websocketServer = new WebSocketServer({
   noServer: true,
 });
+
+const AUTHENTICATION_TIMEOUT_MS = 10_000;
+let jwks;
+
+function getAuthConfiguration() {
+  const nextjsOrigin = process.env.NEXTJS_ORIGIN?.replace(/\/$/, "");
+
+  if (!nextjsOrigin) {
+    throw new Error("NEXTJS_ORIGIN is not defined");
+  }
+
+  return {
+    issuer: process.env.JWT_ISSUER || nextjsOrigin,
+    audience: process.env.JWT_AUDIENCE || nextjsOrigin,
+    jwksUrl: new URL("/api/auth/jwks", nextjsOrigin),
+  };
+}
+
+async function verifyAuthenticationToken(token) {
+  const { issuer, audience, jwksUrl } = getAuthConfiguration();
+  jwks ??= createRemoteJWKSet(jwksUrl);
+
+  const { payload } = await jwtVerify(token, jwks, {
+    issuer,
+    audience,
+    algorithms: ["EdDSA", "ES256", "RS256"],
+  });
+
+  if (typeof payload.sub !== "string" || payload.sub.trim().length === 0) {
+    throw new Error("JWT is missing its subject");
+  }
+
+  return payload;
+}
 
 function sendJson(socket, message) {
   if (socket.readyState !== socket.OPEN) return;
@@ -30,25 +59,22 @@ function sendError(socket, message) {
 }
 
 websocketServer.on("connection", async (socket, request) => {
-  const { authenticated, user, preferences } = await createContext({ request });
+  let authenticationState = "unauthenticated";
+  let authenticationToken;
+  let userId;
 
-  if (!authenticated || !user) {
-    logger.warn("Unauthorized WebSocket connection attempt", {
-      ip: request.socket.remoteAddress,
-    });
-    socket.close();
-    return;
-  }
-
-  const userId = user.id;
-
-  register(userId, preferences);
-
-  logger.info("WebSocket connected", { userId });
-
-  sendJson(socket, {
-    type: "connected",
-  });
+  const authenticationTimeout = setTimeout(() => {
+    if (authenticationState !== "authenticated") {
+      logger.warn("WebSocket authentication timed out", {
+        ip: request.socket.remoteAddress,
+      });
+      sendJson(socket, {
+        type: "authentication_error",
+        payload: { message: "Authentication timed out" },
+      });
+      socket.close(1008, "Authentication required");
+    }
+  }, AUTHENTICATION_TIMEOUT_MS);
 
   socket.on("message", async (rawMessage) => {
     let parsedMessage;
@@ -78,6 +104,65 @@ websocketServer.on("connection", async (socket, request) => {
         });
 
         sendError(socket, "Invalid message payload format");
+        return;
+      }
+
+      if (authenticationState !== "authenticated") {
+        if (
+          authenticationState !== "unauthenticated" ||
+          parsedMessage.type !== "authenticate" ||
+          typeof parsedMessage.payload.token !== "string" ||
+          parsedMessage.payload.token.length === 0
+        ) {
+          authenticationState = "rejected";
+          clearTimeout(authenticationTimeout);
+          sendJson(socket, {
+            type: "authentication_error",
+            payload: { message: "Authentication is required" },
+          });
+          socket.close(1008, "Authentication required");
+          return;
+        }
+
+        authenticationState = "authenticating";
+
+        try {
+          const claims = await verifyAuthenticationToken(
+            parsedMessage.payload.token,
+          );
+
+          userId = claims.sub;
+          authenticationToken = parsedMessage.payload.token;
+          authenticationState = "authenticated";
+          clearTimeout(authenticationTimeout);
+
+          logger.info("WebSocket authenticated", { userId });
+          sendJson(socket, { type: "authenticated" });
+        } catch (error) {
+          authenticationState = "rejected";
+          clearTimeout(authenticationTimeout);
+
+          let receivedClaims;
+
+          try {
+            const { iss, aud } = decodeJwt(parsedMessage.payload.token);
+            receivedClaims = { issuer: iss, audience: aud };
+          } catch {
+            receivedClaims = { issuer: undefined, audience: undefined };
+          }
+
+          logger.warn("WebSocket authentication failed", {
+            ip: request.socket.remoteAddress,
+            error: error.message,
+            ...receivedClaims,
+          });
+          sendJson(socket, {
+            type: "authentication_error",
+            payload: { message: "Authentication failed" },
+          });
+          socket.close(1008, "Authentication failed");
+        }
+
         return;
       }
 
@@ -114,30 +199,20 @@ websocketServer.on("connection", async (socket, request) => {
         return;
       }
 
-      const conversationPreferences = getPreferences(userId);
+      const conversationPreferences = await getPreferencesByUserId({
+        token: authenticationToken,
+      });
+
+      const aiModel = {
+        modelId: conversationPreferences.defaultModelId,
+        supportsTemperature: true,
+        supportsReasoning: false,
+        supportsVerbosity: false,
+      }
 
       if (!conversationPreferences) {
         logger.warn("Missing conversation preferences", { userId });
         sendError(socket, "Missing conversation preferences");
-        return;
-      }
-
-      const aiAgent = getAiAgentById(conversationPreferences.defaultAgentId);
-      const aiModel = getAiModelById(conversationPreferences.defaultModelId);
-      const reasoningLevel = getReasoningLevelById(
-        conversationPreferences.defaultReasoningId,
-      );
-      const verbosityLevel = getVerbosityLevelById(
-        conversationPreferences.defaultVerbosityId,
-      );
-
-      if (!aiModel) {
-        logger.warn("Missing AI model", {
-          userId,
-          modelId: conversationPreferences.defaultModelId,
-        });
-
-        sendError(socket, "Selected AI model was not found");
         return;
       }
 
@@ -146,10 +221,10 @@ websocketServer.on("connection", async (socket, request) => {
       const stream = await createChatStream({
         message: content.trim(),
         model: aiModel,
-        reasoningLevel,
-        verbosityLevel,
+        reasoningLevel: null,
+        verbosityLevel: null,
         temperature: conversationPreferences.temperature,
-        agentSystemPrompt: aiAgent.systemPrompt,
+        agentSystemPrompt: "You are a helpful assistant.",
       });
 
       for await (const event of stream) {
@@ -183,7 +258,7 @@ websocketServer.on("connection", async (socket, request) => {
       }
 
       const savedConversation = await saveConversationTurn({
-        userId,
+        token: authenticationToken,
         conversationId,
         userMessage: content.trim(),
         assistantMessage: fullAssistantResponse,
@@ -206,7 +281,12 @@ websocketServer.on("connection", async (socket, request) => {
   });
 
   socket.on("close", () => {
-    remove(userId);
-    logger.info("WebSocket disconnected", { userId });
+    clearTimeout(authenticationTimeout);
+    authenticationToken = undefined;
+
+    if (userId) {
+      remove(userId);
+      logger.info("WebSocket disconnected", { userId });
+    }
   });
 });

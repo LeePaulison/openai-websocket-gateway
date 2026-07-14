@@ -1,4 +1,7 @@
-import { db } from "../lib/db/sqlite.js";
+import { asc, eq, sql } from "drizzle-orm";
+
+import { db } from "../lib/db/neon.js";
+import { verbosityLevels } from "../drizzle/verbosityLevels.js";
 
 export const defaultVerbosityLevels = [
   {
@@ -19,61 +22,69 @@ export const defaultVerbosityLevels = [
   },
 ];
 
-export function getVerbosityLevels() {
+export async function getVerbosityLevels() {
   return db
-    .prepare(
-      `
-      SELECT
-        id AS levelId,
-        name,
-        description
-      FROM verbosity_levels
-      WHERE enabled = 1
-      ORDER BY name
-      `,
-    )
-    .all();
+    .select({
+      levelId: verbosityLevels.levelId,
+      name: verbosityLevels.name,
+      description: verbosityLevels.description,
+    })
+    .from(verbosityLevels)
+    .where(eq(verbosityLevels.enabled, true))
+    .orderBy(asc(verbosityLevels.name));
 }
 
-export function getVerbosityLevelById(levelId) {
-  return db
-    .prepare(
-      `
-      SELECT
-        id AS levelId,
+export async function getVerbosityLevelById(levelId) {
+  const [level] = await db
+    .select({
+      levelId: verbosityLevels.levelId,
+      name: verbosityLevels.name,
+      description: verbosityLevels.description,
+      createdAt: verbosityLevels.createdAt,
+      updatedAt: verbosityLevels.updatedAt,
+    })
+    .from(verbosityLevels)
+    .where(eq(verbosityLevels.levelId, levelId))
+    .limit(1);
+
+  return level;
+}
+
+export async function upsertVerbosityLevel({
+  levelId,
+  name,
+  description,
+}) {
+  const [level] = await db
+    .insert(verbosityLevels)
+    .values({
+      levelId,
+      name,
+      description,
+    })
+    .onConflictDoUpdate({
+      target: verbosityLevels.levelId,
+      set: {
         name,
         description,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM verbosity_levels
-      WHERE id = ?
-      `,
-    )
-    .get(levelId);
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+
+  return level;
 }
 
-export function upsertVerbosityLevel({ levelId, name, description }) {
-  db.prepare(
-    `
-    INSERT INTO verbosity_levels (
-      id,
-      name,
-      description
-    )
-    VALUES (?, ?, ?)
-    ON CONFLICT(id)
-    DO UPDATE SET
-      name = excluded.name,
-      description = excluded.description,
-      updated_at = CURRENT_TIMESTAMP
-    `,
-  ).run(levelId, name, description);
-
-  return getVerbosityLevelById(levelId);
-}
-
-export function createDefaultVerbosityLevels() {
-  defaultVerbosityLevels.forEach((level) => {
-    upsertVerbosityLevel(level);
-  });
+export async function createDefaultVerbosityLevels() {
+  await db
+    .insert(verbosityLevels)
+    .values(defaultVerbosityLevels)
+    .onConflictDoUpdate({
+      target: verbosityLevels.levelId,
+      set: {
+        name: sql.raw("excluded.name"),
+        description: sql.raw("excluded.description"),
+        updatedAt: new Date(),
+      },
+    });
 }

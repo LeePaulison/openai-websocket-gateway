@@ -1,4 +1,7 @@
-import { db } from "../lib/db/sqlite.js";
+import { asc, eq, sql } from "drizzle-orm";
+
+import { db } from "../lib/db/neon.js";
+import { aiModels } from "../drizzle/aiModels.js";
 
 export const defaultAiModels = [
   {
@@ -7,10 +10,10 @@ export const defaultAiModels = [
     provider: "OpenAI",
     description:
       "Highest capability model for reasoning, coding, writing, and complex problem solving.",
-    supportsTemperature: 0,
-    supportsReasoning: 1,
-    supportsVerbosity: 1,
-    supportsStreaming: 1,
+    supportsTemperature: false,
+    supportsReasoning: true,
+    supportsVerbosity: true,
+    supportsStreaming: true,
   },
   {
     modelId: "gpt-5-mini",
@@ -18,10 +21,10 @@ export const defaultAiModels = [
     provider: "OpenAI",
     description:
       "Fast, cost-effective model for everyday development and chat.",
-    supportsTemperature: 0,
-    supportsReasoning: 1,
-    supportsVerbosity: 1,
-    supportsStreaming: 1,
+    supportsTemperature: false,
+    supportsReasoning: true,
+    supportsVerbosity: true,
+    supportsStreaming: true,
   },
   {
     modelId: "gpt-4.1",
@@ -29,88 +32,42 @@ export const defaultAiModels = [
     provider: "OpenAI",
     description:
       "Advanced coding and reasoning model with excellent instruction following.",
-    supportsTemperature: 1,
-    supportsReasoning: 0,
-    supportsVerbosity: 0,
-    supportsStreaming: 1,
+    supportsTemperature: true,
+    supportsReasoning: false,
+    supportsVerbosity: false,
+    supportsStreaming: true,
   },
   {
     modelId: "gpt-4.1-mini",
     name: "GPT-4.1 Mini",
     provider: "OpenAI",
     description: "Balanced model optimized for speed, quality, and lower cost.",
-    supportsTemperature: 1,
-    supportsReasoning: 0,
-    supportsVerbosity: 0,
-    supportsStreaming: 1,
+    supportsTemperature: true,
+    supportsReasoning: false,
+    supportsVerbosity: false,
+    supportsStreaming: true,
   },
 ];
 
-const MODEL_CAPABILITIES = `
-  supports_temperature AS supportsTemperature,
-  supports_reasoning AS supportsReasoning,
-  supports_verbosity AS supportsVerbosity,
-  supports_streaming AS supportsStreaming
-`;
-
-export function getAiModels() {
-  const models = db
-    .prepare(
-      `
-      SELECT
-        id AS modelId,
-        provider,
-        name,
-        description,
-        ${MODEL_CAPABILITIES}
-      FROM ai_models
-      WHERE enabled = 1
-      ORDER BY provider, name
-      `,
-    )
-    .all();
-
-  return models.map((model) => ({
-    ...model,
-    supportsTemperature: Boolean(model.supportsTemperature),
-    supportsReasoning: Boolean(model.supportsReasoning),
-    supportsVerbosity: Boolean(model.supportsVerbosity),
-    supportsStreaming: Boolean(model.supportsStreaming),
-  }));
+export async function getAiModels() {
+  return db
+    .select()
+    .from(aiModels)
+    .where(eq(aiModels.enabled, true))
+    .orderBy(asc(aiModels.provider), asc(aiModels.name));
 }
 
-export function getAiModelById(modelId) {
-  const model = db
-    .prepare(
-      `
-      SELECT
-        id AS modelId,
-        name,
-        provider,
-        description,
-        ${MODEL_CAPABILITIES},
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM ai_models
-      WHERE id = ?
-      `,
-    )
-    .get(modelId);
+export async function getAiModelById(modelId) {
+  const [model] = await db
+    .select()
+    .from(aiModels)
+    .where(eq(aiModels.modelId, modelId))
+    .limit(1);
 
-  if (!model) {
-    return null;
-  }
-
-  return {
-    ...model,
-    supportsTemperature: Boolean(model.supportsTemperature),
-    supportsReasoning: Boolean(model.supportsReasoning),
-    supportsVerbosity: Boolean(model.supportsVerbosity),
-    supportsStreaming: Boolean(model.supportsStreaming),
-  };
+  return model ?? null;
 }
 
-export function upsertAiModel({
+export async function upsertAiModel({
   modelId,
   name,
   provider,
@@ -120,46 +77,51 @@ export function upsertAiModel({
   supportsVerbosity,
   supportsStreaming,
 }) {
-  db.prepare(
-    `
-    INSERT INTO ai_models (
-      id,
+  const [model] = await db
+    .insert(aiModels)
+    .values({
+      modelId,
       name,
       provider,
       description,
-      supports_temperature,
-      supports_reasoning,
-      supports_verbosity,
-      supports_streaming
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id)
-    DO UPDATE SET
-      name = excluded.name,
-      provider = excluded.provider,
-      description = excluded.description,
-      supports_temperature = excluded.supports_temperature,
-      supports_reasoning = excluded.supports_reasoning,
-      supports_verbosity = excluded.supports_verbosity,
-      supports_streaming = excluded.supports_streaming,
-      updated_at = CURRENT_TIMESTAMP
-    `,
-  ).run(
-    modelId,
-    name,
-    provider,
-    description,
-    supportsTemperature,
-    supportsReasoning,
-    supportsVerbosity,
-    supportsStreaming,
-  );
+      supportsTemperature,
+      supportsReasoning,
+      supportsVerbosity,
+      supportsStreaming,
+    })
+    .onConflictDoUpdate({
+      target: aiModels.modelId,
+      set: {
+        name,
+        provider,
+        description,
+        supportsTemperature,
+        supportsReasoning,
+        supportsVerbosity,
+        supportsStreaming,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
 
-  return getAiModelById(modelId);
+  return model;
 }
 
-export function createDefaultAiModels() {
-  defaultAiModels.forEach((model) => {
-    upsertAiModel(model);
-  });
+export async function createDefaultAiModels() {
+  await db
+    .insert(aiModels)
+    .values(defaultAiModels)
+    .onConflictDoUpdate({
+      target: aiModels.modelId,
+      set: {
+        name: sql.raw("excluded.name"),
+        provider: sql.raw("excluded.provider"),
+        description: sql.raw("excluded.description"),
+        supportsTemperature: sql.raw("excluded.supports_temperature"),
+        supportsReasoning: sql.raw("excluded.supports_reasoning"),
+        supportsVerbosity: sql.raw("excluded.supports_verbosity"),
+        supportsStreaming: sql.raw("excluded.supports_streaming"),
+        updatedAt: new Date(),
+      },
+    });
 }

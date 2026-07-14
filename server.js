@@ -4,18 +4,7 @@ import cors from "cors";
 
 import "dotenv/config";
 
-import { toNodeHandler } from "better-auth/node";
-
-import { db } from "./lib/db/sqlite.js";
-import { auth } from "./auth/auth.js";
 import { websocketServer } from "./websocket.js";
-import { yoga } from "./graphql.js";
-
-import userRouter from "./routes/user.js";
-import { createDefaultAiAgents } from "./repositories/aiAgentsRepository.js";
-import { createDefaultAiModels } from "./repositories/aiModelsRepository.js";
-import { createDefaultVerbosityLevels } from "./repositories/verbosityLevelsRepository.js";
-import { createDefaultReasoningLevels } from "./repositories/reasoningLevelsRepository.js";
 
 import { logger } from "./lib/logger.js";
 
@@ -24,112 +13,14 @@ const app = express();
 logger.info("Server starting...");
 
 try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS preferences (
-      user_id TEXT PRIMARY KEY,
-      theme TEXT NOT NULL DEFAULT 'dark',
-      default_model_id TEXT NOT NULL DEFAULT 'gpt-4.1-mini',
-      temperature REAL NOT NULL DEFAULT 0.7,
-      default_reasoning_id TEXT NOT NULL DEFAULT 'medium',
-      default_verbosity_id TEXT NOT NULL DEFAULT 'medium',
-      default_agent_id TEXT NOT NULL DEFAULT 'assistant',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ai_models (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        provider TEXT NOT NULL,
-        description TEXT NOT NULL,
-        enabled INTEGER NOT NULL DEFAULT 1,
-
-        supports_temperature INTEGER NOT NULL DEFAULT 0,
-        supports_reasoning INTEGER NOT NULL DEFAULT 0,
-        supports_verbosity INTEGER NOT NULL DEFAULT 0,
-        supports_streaming INTEGER NOT NULL DEFAULT 0,
-
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS reasoning_levels (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS verbosity_levels (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ai_agents (
-      id TEXT PRIMARY KEY,
-      category TEXT NOT NULL,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL,
-      system_prompt TEXT NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  logger.info("Database schema initialized");
-
-  createDefaultAiModels();
-  createDefaultReasoningLevels();
-  createDefaultVerbosityLevels();
-  createDefaultAiAgents();
-
-  logger.info("Default data initialized");
 
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN || "http://localhost:3001",
-      credentials: true,
+      origin: process.env.CORS_ORIGIN || "http://localhost:3000",
     }),
   );
 
-  app.use("/api/graphql", yoga);
-
-  app.use("/api/users", userRouter);
-
-  // app.all("/api/auth/*", toNodeHandler(auth));
-  app.all("/api/auth/*", (req, res) => {
-    if (req.path.includes("/callback")) {
-      logger.info("Request Cookie:", req.headers.cookie);
-    }
-
-    res.on("finish", () => {
-      logger.info("Set-Cookie", {
-        setCookie: res.getHeader("Set-Cookie"),
-      });
-    });
-
-    return toNodeHandler(auth)(req, res);
-  });
-
-  logger.info("Auth routes mounted");
-
-  app.get("/health", (request, response) => {
+  app.get("/health", (response) => {
     response.json({
       status: "ok",
     });
@@ -138,6 +29,19 @@ try {
   const httpServer = http.createServer(app);
 
   httpServer.on("upgrade", (request, socket, head) => {
+    const allowedOrigin = process.env.NEXTJS_ORIGIN?.replace(/\/$/, "");
+
+    if (!allowedOrigin || request.headers.origin !== allowedOrigin) {
+      socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+      socket.destroy();
+
+      logger.warn("WebSocket upgrade failed: invalid origin", {
+        origin: request.headers.origin,
+      });
+
+      return;
+    }
+
     if (request.url !== "/ws") {
       socket.destroy();
 

@@ -1,90 +1,71 @@
-import { ObjectId } from "mongodb";
+import { graphqlRequest } from "../lib/graphql/request.js";
 
-import { getMongoDatabase } from "../lib/db/mongo.js";
-
-export async function createConversation({ userId, messages }) {
-  const database = await getMongoDatabase();
-
-  const conversationsCollection = database.collection("conversations");
-
-  const now = new Date();
-
-  const result = await conversationsCollection.insertOne({
-    userId,
-
-    createdAt: now,
-    updatedAt: now,
-
-    messages,
-  });
-
-  return {
-    conversationId: result.insertedId.toString(),
-    preview: messages[0].content,
-    updatedAt: now.toISOString(),
-  };
-}
-
-export async function appendMessages({ conversationId, messages }) {
-  const database = await getMongoDatabase();
-
-  const conversationsCollection = database.collection("conversations");
-
-  const now = new Date();
-
-  await conversationsCollection.updateOne(
-    {
-      _id: new ObjectId(conversationId),
-    },
-    {
-      $push: {
-        messages: {
-          $each: messages,
-        },
-      },
-
-      $set: {
-        updatedAt: now,
+export async function saveConversationTurn({
+  token,
+  conversationId,
+  userMessage,
+  assistantMessage,
+}) {
+  const data = await graphqlRequest({
+    token,
+    query: `
+      mutation SaveConversationTurn($input: SaveConversationTurnInput!) {
+        saveConversationTurn(input: $input) {
+          conversationId
+          preview
+          updatedAt
+        }
+      }
+    `,
+    variables: {
+      input: {
+        conversationId,
+        userMessage,
+        assistantMessage,
       },
     },
-  );
-
-  return {
-    conversationId,
-    preview: messages[0].content,
-    updatedAt: now.toISOString(),
-  };
-}
-
-export async function getConversationById(conversationId) {
-  const database = await getMongoDatabase();
-
-  const conversationsCollection = database.collection("conversations");
-
-  return conversationsCollection.findOne({
-    _id: new ObjectId(conversationId),
   });
+
+  return data.saveConversationTurn;
 }
 
-export async function getUserConversations(userId) {
-  const database = await getMongoDatabase();
+export async function getConversationById({ token, conversationId }) {
+  const data = await graphqlRequest({
+    token,
+    query: `
+      query Conversation($id: ID!) {
+        conversation(id: $id) {
+          id
+          userId
+          createdAt
+          updatedAt
+          messages {
+            role
+            content
+            createdAt
+          }
+        }
+      }
+    `,
+    variables: { id: conversationId },
+  });
 
-  const conversationsCollection = database.collection("conversations");
+  return data.conversation;
+}
 
-  return conversationsCollection
-    .find(
-      { userId },
-      {
-        projection: {
-          updatedAt: 1,
-          messages: {
-            $slice: -1,
-          },
-        },
-      },
-    )
-    .sort({
-      updatedAt: -1,
-    })
-    .toArray();
+export async function getUserConversations({ token }) {
+  const data = await graphqlRequest({
+    token,
+    query: `
+      query Conversations {
+        conversations {
+          id
+          preview
+          updatedAt
+        }
+      }
+    `,
+  });
+
+  return data.conversations;
 }

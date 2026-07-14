@@ -1,71 +1,17 @@
 import {
-  appendMessages,
-  createConversation,
   getConversationById,
   getUserConversations,
+  saveConversationTurn as saveConversationTurnRepository,
 } from "../repositories/conversationRepository.js";
 
-import { logger } from "../lib/logger.js";
-
-export async function saveConversationTurn({
-  conversationId,
-  userId,
-  userMessage,
-  assistantMessage,
-}) {
-  const messages = [
-    {
-      role: "user",
-      content: userMessage,
-      createdAt: new Date(),
-    },
-    {
-      role: "assistant",
-      content: assistantMessage,
-      createdAt: new Date(),
-    },
-  ];
-
-  if (!conversationId) {
-    return createConversation({
-      userId,
-      messages,
-    });
-  }
-
-  return appendMessages({
-    conversationId,
-    messages,
-  });
+export function saveConversationTurn(input) {
+  return saveConversationTurnRepository(input);
 }
 
-export async function getConversation(conversationId) {
-  return getConversationById(conversationId);
+export function getConversation({ token, conversationId }) {
+  return getConversationById({ token, conversationId });
 }
 
-export async function getUserConversationList(userId) {
-  const conversations = await getUserConversations(userId);
-
-  return conversations.map((conversation) => {
-    const latestMessage =
-      conversation.messages?.[conversation.messages.length - 1];
-
-    const previewText = latestMessage?.content || "Empty conversation";
-
-    const preview =
-      previewText.length > 80 ? `${previewText.slice(0, 80)}...` : previewText;
-
-    return {
-      id: conversation._id.toString(),
-
-      preview,
-
-      updatedAt: new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(conversation.updatedAt),
-    };
-  });
+export function getUserConversationList({ token }) {
+  return getUserConversations({ token });
 }
