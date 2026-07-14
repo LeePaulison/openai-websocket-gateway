@@ -2,6 +2,7 @@ import { asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../lib/db/neon.js";
 import { aiModels } from "../drizzle/aiModels.js";
+import { graphqlRequest } from "../lib/graphql/request.js";
 
 export const defaultAiModels = [
   {
@@ -65,6 +66,24 @@ export async function getAiModelById(modelId) {
     .limit(1);
 
   return model ?? null;
+}
+
+export async function getAiModelByIdFromApi({ token, modelId }) {
+  const data = await graphqlRequest({
+    token,
+    query: `
+      query AiModels {
+        aiModels {
+          modelId
+          supportsTemperature
+          supportsReasoning
+          supportsVerbosity
+        }
+      }
+    `,
+  });
+
+  return data.aiModels.find((model) => model.modelId === modelId) ?? null;
 }
 
 export async function upsertAiModel({

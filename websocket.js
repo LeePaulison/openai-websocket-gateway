@@ -3,6 +3,7 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import { createChatStream } from "./lib/openai/chat.js";
 import { saveConversationTurn } from "./services/conversationService.js";
 import { getPreferencesByUserId } from "./repositories/preferencesRepository.js";
+import { getAiModelByIdFromApi } from "./repositories/aiModelsRepository.js";
 import {
   remove,
 } from "./lib/session/sessionManager.js";
@@ -203,16 +204,23 @@ websocketServer.on("connection", async (socket, request) => {
         token: authenticationToken,
       });
 
-      const aiModel = {
-        modelId: conversationPreferences.defaultModelId,
-        supportsTemperature: true,
-        supportsReasoning: false,
-        supportsVerbosity: false,
-      }
-
       if (!conversationPreferences) {
         logger.warn("Missing conversation preferences", { userId });
         sendError(socket, "Missing conversation preferences");
+        return;
+      }
+
+      const aiModel = await getAiModelByIdFromApi({
+        token: authenticationToken,
+        modelId: conversationPreferences.defaultModelId,
+      });
+
+      if (!aiModel) {
+        logger.warn("Missing AI model", {
+          userId,
+          modelId: conversationPreferences.defaultModelId,
+        });
+        sendError(socket, "Selected AI model was not found");
         return;
       }
 
@@ -221,8 +229,12 @@ websocketServer.on("connection", async (socket, request) => {
       const stream = await createChatStream({
         message: content.trim(),
         model: aiModel,
-        reasoningLevel: null,
-        verbosityLevel: null,
+        reasoningLevel: {
+          levelId: conversationPreferences.defaultReasoningId,
+        },
+        verbosityLevel: {
+          levelId: conversationPreferences.defaultVerbosityId,
+        },
         temperature: conversationPreferences.temperature,
         agentSystemPrompt: "You are a helpful assistant.",
       });
