@@ -1,6 +1,4 @@
-import express from "express";
-import http from "http";
-import cors from "cors";
+import http from "node:http";
 
 import "dotenv/config";
 
@@ -8,25 +6,42 @@ import { websocketServer } from "./websocket.js";
 
 import { logger } from "./lib/logger.js";
 
-const app = express();
-
 logger.info("Server starting...");
 
 try {
+  const corsOrigin =
+    process.env.CORS_ORIGIN ||
+    process.env.NEXTJS_ORIGIN?.replace(/\/$/, "") ||
+    "http://localhost:3000";
 
-  app.use(
-    cors({
-      origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-    }),
-  );
+  const httpServer = http.createServer((request, response) => {
+    response.setHeader("Access-Control-Allow-Origin", corsOrigin);
+    response.setHeader("Vary", "Origin");
 
-  app.get("/health", (_request, response) => {
-    response.json({
-      status: "ok",
-    });
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, {
+        "Access-Control-Allow-Headers":
+          request.headers["access-control-request-headers"] || "Content-Type",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+      });
+      response.end();
+      return;
+    }
+
+    const pathname = new URL(
+      request.url || "/",
+      `http://${request.headers.host || "localhost"}`,
+    ).pathname;
+
+    if (request.method === "GET" && pathname === "/health") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    response.writeHead(404, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ error: "Not found" }));
   });
-
-  const httpServer = http.createServer(app);
 
   httpServer.on("upgrade", (request, socket, head) => {
     const allowedOrigin = process.env.NEXTJS_ORIGIN?.replace(/\/$/, "");
