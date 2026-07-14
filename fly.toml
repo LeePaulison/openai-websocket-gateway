@@ -8,9 +8,6 @@ primary_region = 'dfw'
 
 [build]
 
-[deploy]
-  release_command = "npm run auth:migrate"
-
 [processes]
   app = 'npm start'
 

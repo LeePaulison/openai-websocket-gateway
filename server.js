@@ -20,7 +20,7 @@ try {
     }),
   );
 
-  app.get("/health", (response) => {
+  app.get("/health", (_request, response) => {
     response.json({
       status: "ok",
     });

@@ -1,13 +1,11 @@
 import { WebSocketServer } from "ws";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import { createChatStream } from "./lib/openai/chat.js";
-import { saveConversationTurn } from "./services/conversationService.js";
-import { getPreferencesByUserId } from "./repositories/preferencesRepository.js";
+import { saveConversationTurn } from "./repositories/conversationRepository.js";
+import { getPreferences } from "./repositories/preferencesRepository.js";
 import { getAiModelById } from "./repositories/aiModelsRepository.js";
 import { getAiAgentById } from "./repositories/aiAgentsRepository.js";
-import {
-  remove,
-} from "./lib/session/sessionManager.js";
+
 import { logger } from "./lib/logger.js";
 
 export const websocketServer = new WebSocketServer({
@@ -201,7 +199,7 @@ websocketServer.on("connection", async (socket, request) => {
         return;
       }
 
-      const conversationPreferences = await getPreferencesByUserId({
+      const conversationPreferences = await getPreferences({
         token: authenticationToken,
       });
 
@@ -296,7 +294,7 @@ websocketServer.on("connection", async (socket, request) => {
         payload: savedConversation,
       });
     } catch (error) {
-      logger.error("WebSocket request failed.", {
+      logger.error("WebSocket request failed.", error, {
         userId,
         messageType: parsedMessage?.type,
         error: error.message,
@@ -310,10 +308,5 @@ websocketServer.on("connection", async (socket, request) => {
   socket.on("close", () => {
     clearTimeout(authenticationTimeout);
     authenticationToken = undefined;
-
-    if (userId) {
-      remove(userId);
-      logger.info("WebSocket disconnected", { userId });
-    }
   });
 });

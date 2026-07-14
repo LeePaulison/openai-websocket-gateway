@@ -10,7 +10,7 @@ const PREFERENCES_FIELDS = `
   defaultAgentId
 `;
 
-export async function getPreferencesByUserId({ token }) {
+export async function getPreferences({ token }) {
   const data = await graphqlRequest({
     token,
     query: `
@@ -26,7 +26,7 @@ export async function getPreferencesByUserId({ token }) {
 }
 
 export function createPreferences({ token }) {
-  return getPreferencesByUserId({ token });
+  return getPreferences({ token });
 }
 
 export async function updatePreferences({ token, ...input }) {
