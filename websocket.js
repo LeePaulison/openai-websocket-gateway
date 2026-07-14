@@ -4,6 +4,7 @@ import { createChatStream } from "./lib/openai/chat.js";
 import { saveConversationTurn } from "./services/conversationService.js";
 import { getPreferencesByUserId } from "./repositories/preferencesRepository.js";
 import { getAiModelByIdFromApi } from "./repositories/aiModelsRepository.js";
+import { getAiAgentByIdFromApi } from "./repositories/aiAgentsRepository.js";
 import {
   remove,
 } from "./lib/session/sessionManager.js";
@@ -224,6 +225,20 @@ websocketServer.on("connection", async (socket, request) => {
         return;
       }
 
+      const aiAgent = await getAiAgentByIdFromApi({
+        token: authenticationToken,
+        agentId: conversationPreferences.defaultAgentId,
+      });
+
+      if (!aiAgent) {
+        logger.warn("Missing AI agent", {
+          userId,
+          agentId: conversationPreferences.defaultAgentId,
+        });
+        sendError(socket, "Selected AI agent was not found");
+        return;
+      }
+
       let fullAssistantResponse = "";
 
       const stream = await createChatStream({
@@ -236,7 +251,7 @@ websocketServer.on("connection", async (socket, request) => {
           levelId: conversationPreferences.defaultVerbosityId,
         },
         temperature: conversationPreferences.temperature,
-        agentSystemPrompt: "You are a helpful assistant.",
+        agentSystemPrompt: aiAgent.systemPrompt,
       });
 
       for await (const event of stream) {

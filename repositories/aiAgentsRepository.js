@@ -2,6 +2,7 @@ import { asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../lib/db/neon.js";
 import { aiAgents } from "../drizzle/aiAgents.js";
+import { graphqlRequest } from "../lib/graphql/request.js";
 
 export const defaultAgents = [
   {
@@ -167,6 +168,23 @@ export async function getAiAgentById(agentId) {
     .limit(1);
 
   return agent;
+}
+
+export async function getAiAgentByIdFromApi({ token, agentId }) {
+  const data = await graphqlRequest({
+    token,
+    query: `
+      query AiAgentConfiguration($agentId: String!) {
+        aiAgentConfiguration(agentId: $agentId) {
+          agentId
+          systemPrompt
+        }
+      }
+    `,
+    variables: { agentId },
+  });
+
+  return data.aiAgentConfiguration;
 }
 
 export async function upsertAiAgent({
