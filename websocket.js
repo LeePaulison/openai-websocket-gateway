@@ -3,8 +3,8 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import { createChatStream } from "./lib/openai/chat.js";
 import { saveConversationTurn } from "./services/conversationService.js";
 import { getPreferencesByUserId } from "./repositories/preferencesRepository.js";
-import { getAiModelByIdFromApi } from "./repositories/aiModelsRepository.js";
-import { getAiAgentByIdFromApi } from "./repositories/aiAgentsRepository.js";
+import { getAiModelById } from "./repositories/aiModelsRepository.js";
+import { getAiAgentById } from "./repositories/aiAgentsRepository.js";
 import {
   remove,
 } from "./lib/session/sessionManager.js";
@@ -211,7 +211,7 @@ websocketServer.on("connection", async (socket, request) => {
         return;
       }
 
-      const aiModel = await getAiModelByIdFromApi({
+      const aiModel = await getAiModelById({
         token: authenticationToken,
         modelId: conversationPreferences.defaultModelId,
       });
@@ -225,7 +225,7 @@ websocketServer.on("connection", async (socket, request) => {
         return;
       }
 
-      const aiAgent = await getAiAgentByIdFromApi({
+      const aiAgent = await getAiAgentById({
         token: authenticationToken,
         agentId: conversationPreferences.defaultAgentId,
       });
