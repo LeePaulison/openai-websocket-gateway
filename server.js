@@ -5,14 +5,12 @@ import "dotenv/config";
 import { websocketServer } from "./websocket.js";
 
 import { logger } from "./lib/logger.js";
+import { getServerConfiguration } from "./lib/config.js";
 
 logger.info("Server starting...");
 
 try {
-  const corsOrigin =
-    process.env.CORS_ORIGIN ||
-    process.env.NEXTJS_ORIGIN?.replace(/\/$/, "") ||
-    "http://localhost:3000";
+  const { clientOrigin, corsOrigin, host, port } = getServerConfiguration();
 
   const httpServer = http.createServer((request, response) => {
     response.setHeader("Access-Control-Allow-Origin", corsOrigin);
@@ -44,9 +42,7 @@ try {
   });
 
   httpServer.on("upgrade", (request, socket, head) => {
-    const allowedOrigin = process.env.NEXTJS_ORIGIN?.replace(/\/$/, "");
-
-    if (!allowedOrigin || request.headers.origin !== allowedOrigin) {
+    if (request.headers.origin !== clientOrigin) {
       socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
       socket.destroy();
 
@@ -84,9 +80,6 @@ try {
     logger.error("HTTP server failed", error);
     process.exit(1);
   });
-
-  const host = process.env.HOST || "0.0.0.0";
-  const port = Number(process.env.PORT) || 8080;
 
   httpServer.listen(port, host, () => {
     logger.info("Server ready", {

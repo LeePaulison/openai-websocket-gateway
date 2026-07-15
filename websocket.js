@@ -7,6 +7,7 @@ import { getAiModelById } from "./repositories/aiModelsRepository.js";
 import { getAiAgentById } from "./repositories/aiAgentsRepository.js";
 
 import { logger } from "./lib/logger.js";
+import { getServerConfiguration } from "./lib/config.js";
 
 export const websocketServer = new WebSocketServer({
   noServer: true,
@@ -16,16 +17,12 @@ const AUTHENTICATION_TIMEOUT_MS = 10_000;
 let jwks;
 
 function getAuthConfiguration() {
-  const nextjsOrigin = process.env.NEXTJS_ORIGIN?.replace(/\/$/, "");
-
-  if (!nextjsOrigin) {
-    throw new Error("NEXTJS_ORIGIN is not defined");
-  }
+  const { jwtIssuer, jwtAudience, jwksUrl } = getServerConfiguration();
 
   return {
-    issuer: process.env.JWT_ISSUER || nextjsOrigin,
-    audience: process.env.JWT_AUDIENCE || nextjsOrigin,
-    jwksUrl: new URL("/api/auth/jwks", nextjsOrigin),
+    issuer: jwtIssuer,
+    audience: jwtAudience,
+    jwksUrl: new URL(jwksUrl),
   };
 }
 

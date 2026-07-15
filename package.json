@@ -1,7 +1,7 @@
 {
-  "name": "saigely-server",
+  "name": "openai-websocket-gateway",
   "version": "1.0.0",
-  "description": "AI backend for Saigely",
+  "description": "Authenticated WebSocket gateway for streaming OpenAI Responses API output",
   "author": "Lee Paulison Jr",
   "license": "ISC",
   "type": "module",
