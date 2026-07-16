@@ -237,6 +237,10 @@ Then deploy:
 flyctl deploy
 ```
 
+## Operations
+
+Saigely's canonical [production operations runbook](https://github.com/LeePaulison/saigely/blob/main/docs/operations.md) covers the coordinated Vercel/Fly.io deployment order, health and readiness interpretation, smoke tests, incident diagnosis, and rollback. This repository's configuration, protocol, and deployment sections remain the gateway-specific reference.
+
 ## Observability and security
 
 The gateway emits newline-delimited structured JSON logs for HTTP requests, WebSocket connection lifecycle events, authentication outcomes, rate and payload violations, completed chat requests, and failures. Logs include correlation IDs and durations but redact tokens, authorization values, prompts, and message content.
