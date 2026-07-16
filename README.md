@@ -21,6 +21,8 @@ It also exposes `GET /health`, which returns:
 {"status":"ok"}
 ```
 
+`GET /ready` checks OpenAI API access, the configured JWKS, the GraphQL readiness query, and the application origin. It returns `503` when any dependency is unavailable. Results are briefly cached to keep health polling from repeatedly calling dependencies. Both health endpoints return non-cacheable JSON responses.
+
 ## Requirements
 
 - Node.js 22+
@@ -47,10 +49,20 @@ On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 | `CLIENT_ORIGIN` | Yes | Exact browser origin allowed to open WebSocket connections. |
 | `JWT_ISSUER` | Yes | Expected JWT `iss` claim. Defaults to `CLIENT_ORIGIN` for compatibility. |
 | `JWT_AUDIENCE` | Yes | Expected JWT `aud` claim. Defaults to `CLIENT_ORIGIN` for compatibility. |
+| `JWT_ALGORITHMS` | No | Comma-separated JWT algorithm allowlist. Defaults to `RS256`; supported values are `RS256`, `ES256`, and `EdDSA`. |
 | `JWKS_URL` | Yes | Full JWKS URL or its origin. An origin resolves to `/api/auth/jwks`. |
 | `CORS_ORIGIN` | No | HTTP CORS origin. Defaults to `CLIENT_ORIGIN`. |
 | `HOST` | No | Listen address. Defaults to `0.0.0.0`. |
 | `PORT` | No | Listen port. Defaults to `8080`. |
+| `MAX_PAYLOAD_BYTES` | No | Maximum WebSocket frame size. Defaults to `655360` (640 KiB) to support Saigely's bounded text attachments. |
+| `MESSAGES_PER_MINUTE` | No | Per-user message limit per process. Defaults to `30`. |
+| `MAX_CONNECTIONS` | No | Maximum simultaneous WebSocket connections per process. Defaults to `1000`. |
+| `AUTHENTICATION_TIMEOUT_MS` | No | Time allowed for the first authentication message. Defaults to `10000`. |
+| `GRAPHQL_TIMEOUT_MS` | No | Timeout for calls to the application GraphQL API. Defaults to `10000`. |
+| `STREAM_IDLE_TIMEOUT_MS` | No | Maximum wait between OpenAI stream events. Defaults to `120000`. |
+| `HEARTBEAT_INTERVAL_MS` | No | Ping interval used to terminate dead sockets. Defaults to `30000`. |
+| `READINESS_TIMEOUT_MS` | No | Per-dependency readiness timeout. Defaults to `5000`. |
+| `READINESS_CACHE_MS` | No | Successful readiness-result cache duration. Defaults to `30000`. |
 | `NEXTJS_ORIGIN` | No | Legacy fallback for `API_ORIGIN` and `CLIENT_ORIGIN`. |
 
 Values ending with `/` are normalized. WebSocket origin matching remains exact after normalization.
@@ -224,6 +236,14 @@ Then deploy:
 ```bash
 flyctl deploy
 ```
+
+## Observability and security
+
+The gateway emits newline-delimited structured JSON logs for HTTP requests, WebSocket connection lifecycle events, authentication outcomes, rate and payload violations, completed chat requests, and failures. Logs include correlation IDs and durations but redact tokens, authorization values, prompts, and message content.
+
+Runtime protections include exact WebSocket origin matching, a JWT issuer/audience/algorithm allowlist, authentication deadlines, disabled WebSocket compression, bounded payloads and connection counts, per-user message rate limiting, one in-flight chat request per connection, GraphQL and stream-idle timeouts, heartbeat cleanup for dead sockets, restrictive CORS behavior, and non-cacheable health responses.
+
+The built-in rate limiter is process-local. Multi-instance deployments should also enforce distributed or edge rate limits so clients cannot multiply their allowance across instances.
 
 ## Current scope
 

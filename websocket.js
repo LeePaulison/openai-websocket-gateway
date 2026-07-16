@@ -8,38 +8,59 @@ import { getAiModelById } from "./repositories/aiModelsRepository.js";
 import { getAiAgentById } from "./repositories/aiAgentsRepository.js";
 import { createWebSocketConnectionHandler } from "./lib/websocket/connectionHandler.js";
 import { logger } from "./lib/logger.js";
-import { getServerConfiguration } from "./lib/config.js";
 
-export const websocketServer = new WebSocketServer({ noServer: true });
-
-let jwks;
-
-async function verifyAuthenticationToken(token) {
-  const { jwtIssuer, jwtAudience, jwksUrl } = getServerConfiguration();
-  jwks ??= createRemoteJWKSet(new URL(jwksUrl));
-
-  const { payload } = await jwtVerify(token, jwks, {
-    issuer: jwtIssuer,
-    audience: jwtAudience,
-    algorithms: ["EdDSA", "ES256", "RS256"],
+export function createWebSocketServer(configuration) {
+  const websocketServer = new WebSocketServer({
+    noServer: true,
+    maxPayload: configuration.maxPayloadBytes,
+    perMessageDeflate: false,
   });
+  const heartbeat = setInterval(() => {
+    for (const socket of websocketServer.clients) {
+      if (socket.isAlive === false) {
+        socket.terminate();
+        continue;
+      }
+      socket.isAlive = false;
+      socket.ping();
+    }
+  }, configuration.heartbeatIntervalMs);
+  heartbeat.unref();
+  websocketServer.on("connection", (socket) => {
+    socket.isAlive = true;
+    socket.on("pong", () => { socket.isAlive = true; });
+  });
+  websocketServer.on("close", () => clearInterval(heartbeat));
+  let jwks;
 
-  if (typeof payload.sub !== "string" || payload.sub.trim().length === 0) {
-    throw new Error("JWT is missing its subject");
+  async function verifyAuthenticationToken(token) {
+    jwks ??= createRemoteJWKSet(new URL(configuration.jwksUrl));
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: configuration.jwtIssuer,
+      audience: configuration.jwtAudience,
+      algorithms: configuration.jwtAlgorithms,
+    });
+
+    if (typeof payload.sub !== "string" || payload.sub.trim().length === 0) {
+      throw new Error("JWT is missing its subject");
+    }
+    return payload;
   }
 
-  return payload;
+  websocketServer.on("connection", createWebSocketConnectionHandler({
+    verifyAuthenticationToken,
+    decodeToken: decodeJwt,
+    getPreferences,
+    getAiModelById,
+    getAiAgentById,
+    createChatStream,
+    saveConversationTurn,
+    logger,
+    authenticationTimeoutMs: configuration.authenticationTimeoutMs,
+    maxPayloadBytes: configuration.maxPayloadBytes,
+    messagesPerMinute: configuration.messagesPerMinute,
+    streamIdleTimeoutMs: configuration.streamIdleTimeoutMs,
+  }));
+
+  return websocketServer;
 }
-
-const handleConnection = createWebSocketConnectionHandler({
-  verifyAuthenticationToken,
-  decodeToken: decodeJwt,
-  getPreferences,
-  getAiModelById,
-  getAiAgentById,
-  createChatStream,
-  saveConversationTurn,
-  logger,
-});
-
-websocketServer.on("connection", handleConnection);

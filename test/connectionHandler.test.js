@@ -175,3 +175,49 @@ test("a second message is rejected while a stream is active", async () => {
   release();
   await tick();
 });
+
+test("oversized messages close the connection before parsing", async () => {
+  const socket = new TestSocket();
+  createWebSocketConnectionHandler(dependencies({ maxPayloadBytes: 8 }))(socket, request);
+
+  socket.emit("message", Buffer.from("123456789"));
+  await tick();
+
+  assert.deepEqual(socket.closed, { code: 1009, reason: "Message too large" });
+});
+
+test("message flooding is rate limited and closes the connection", async () => {
+  const socket = await connect({ messagesPerMinute: 1 });
+
+  send(socket, "unsupported", {});
+  await tick();
+  send(socket, "unsupported", {});
+  await tick();
+
+  assert.equal(socket.sent.at(-1).payload.message, "Message rate limit exceeded");
+  assert.deepEqual(socket.closed, { code: 1008, reason: "Rate limit exceeded" });
+});
+
+test("a stalled OpenAI stream times out and releases the request", async () => {
+  let cancelled = false;
+  const socket = await connect({
+    streamIdleTimeoutMs: 5,
+    createChatStream: async () => ({
+      [Symbol.asyncIterator]() {
+        return {
+          next: () => new Promise(() => {}),
+          return: async () => {
+            cancelled = true;
+            return { done: true };
+          },
+        };
+      },
+    }),
+  });
+
+  send(socket, "chat_message", { content: "Hi", conversationId: null });
+  await new Promise((resolve) => setTimeout(resolve, 15));
+
+  assert.equal(socket.sent.at(-1).payload.message, "Failed to process websocket request.");
+  assert.equal(cancelled, true);
+});
