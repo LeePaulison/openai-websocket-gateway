@@ -11,6 +11,14 @@ import { createReadinessCheck } from "./lib/readiness.js";
 
 logger.info("Server starting...");
 
+function getRequestPath(value) {
+  try {
+    return new URL(value || "/", "http://localhost").pathname;
+  } catch {
+    return "/";
+  }
+}
+
 try {
   const configuration = getServerConfiguration();
   const { clientOrigin, corsOrigin, host, port } = configuration;
@@ -37,7 +45,7 @@ try {
       logger.info("HTTP request completed", {
         requestId,
         method: request.method,
-        path: request.url,
+        path: getRequestPath(request.url),
         statusCode: response.statusCode,
         durationMs: Date.now() - startedAt,
       });
@@ -121,7 +129,7 @@ try {
       socket.destroy();
 
       logger.warn("WebSocket upgrade failed: invalid URL", {
-        url: request.url,
+        path: getRequestPath(request.url),
         requestId,
       });
 
